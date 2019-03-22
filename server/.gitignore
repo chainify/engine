@@ -1,0 +1,12 @@
+.idea
+.pycharm_helpers
+.vscode
+
+project
+pycharm
+
+config.ini
+config.prod.ini
+
+*.pyc
+sql.py

@@ -1,0 +1,78 @@
+version: "2"
+
+services:
+  nginx:
+    build: ./nginx
+    image: chainify/engine-nginx
+    container_name: engine-nginx
+    ports:
+      - 80:80
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+      - parser
+      - ipfs
+    restart: unless-stopped
+
+  api:
+    build: ./server
+    image: chainify/engine-api
+    container_name: engine-api
+    volumes:
+      - ./server:/opt
+      - ./server/config.ini:/opt/config.ini
+      - ~/.data/leveldb/chainify:/root/.data/leveldb
+    networks:
+      - postgres_default
+      - default
+    external_links:
+      - postgres:postgres
+    command: bash -c "python3.7 server.py"
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+  parser:
+    build: ./parser
+    image: chainify/engine-parser
+    container_name: engine-parser
+    volumes:
+      - ./parser:/opt
+    networks:
+      - postgres_default
+      - default
+    external_links:
+      - postgres:postgres
+    command: bash -c "python3.7 server.py"
+    tty: true
+    stdin_open: true
+    labels:
+      - "autoheal=true"
+    restart: unless-stopped
+
+  ipfs:
+    build: ./ipfs
+    image: chainify/engine-ipfs
+    container_name: engine-ipfs
+    volumes:
+      - ~/.data/ipfs/chainify:/data/ipfs
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+  autoheal:
+    build: ./autoheal
+    image: chainify/engine-autoheal
+    container_name: engine-autoheal
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+
+networks:
+  default:
+    driver: bridge
+  postgres_default:
+    external: true

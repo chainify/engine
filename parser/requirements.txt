@@ -1,0 +1,11 @@
+sanic
+PyJWT
+sendgrid
+pywaves
+requests
+aiohttp
+psycopg2-binary
+aiopg
+asyncpg
+gino
+configparser
