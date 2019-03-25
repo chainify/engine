@@ -32,67 +32,53 @@ cdm = Blueprint('cdm_v1', url_prefix='/cdm')
 
 
 class Cdm(HTTPMethodView):
-
-    def get(self, request, address):
-        conn = psycopg2.connect(**dsn)
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT id, sender, recipient, attachment, timestamp, cnfy_id FROM transactions
-                        WHERE fee_asset_id='{asset_id}' AND (sender='{address}' OR recipient='{address}')
-                        ORDER BY timestamp DESC""".format(
-                            asset_id=config['blockchain']['asset_id'],
-                            address=address
-                        ))
-                    transactions = cur.fetchall()
-
-                    messages = collections.OrderedDict()
-                    files = {"saved": []}
-                    accounts = []
-                    for tx in transactions:
-                        ipsf_hash = base58.b58decode(tx[3]).decode("utf-8")
-                        ipfs_data = read_ipfs_file(ipsf_hash)
-
-                        msg_type = 'outgoing' if tx[1] == address else 'incoming'
-
-                        data = {
-                            "id": tx[5],
-                            "txId": tx[0],
-                            "sender": tx[1],
-                            "recipient": tx[2],
-                            "attachment": tx[3],
-                            "timestamp": tx[4],
-                            "message": ipfs_data,
-                            "type": msg_type
-                        }
-
-                        interlocutor = data['recipient'] if data['sender'] == address else data['sender']
-
-                        if data['sender'] == data['recipient']:
-                            files['saved'].append(data)
-                        else:
-                            if interlocutor in messages: 
-                                messages[interlocutor]['txs'].insert(0, data)
-                            else:
-                                account = get_account(interlocutor)
-                                if account:
-                                    messages[interlocutor] = {
-                                        'account': account,
-                                        'txs': [data]
-                                    }
-                                    accounts.append(interlocutor)
-
-        except Exception as error:
-            return bad_request(error)
-
+    @staticmethod
+    def get(request, address):
+        
         data = {
-            'messages': messages,
-            'files': files,
-            'accounts': accounts
+            'cdms': get_cdms(address),
         }
 
         return json(data, status=200)
 
+def get_cdms(address):
+    conn = psycopg2.connect(**dsn)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, sender, recipient, attachment, timestamp, cnfy_id FROM transactions
+                    WHERE fee_asset_id='{asset_id}' AND (sender='{address}' OR recipient='{address}')
+                    ORDER BY timestamp DESC""".format(
+                        asset_id=config['blockchain']['asset_id'],
+                        address=address
+                    ))
+                transactions = cur.fetchall()
+
+                cdms = []
+                for tx in transactions:
+                    ipsf_hash = base58.b58decode(tx[3]).decode("utf-8")
+                    ipfs_data = read_ipfs_file(ipsf_hash)
+
+                    msg_type = 'incoming' if tx[1] == address else 'outgoing'
+
+                    data = {
+                        "id": tx[5],
+                        "txId": tx[0],
+                        "sender": tx[1],
+                        "recipient": tx[2],
+                        "attachment": tx[3],
+                        "timestamp": tx[4],
+                        "message": ipfs_data,
+                        "type": msg_type
+                    }
+
+                    if data['sender'] != data['recipient']:
+                        cdms.insert(0, data)
+
+    except Exception as error:
+        return bad_request(error)
+    
+    return cdms
 
 cdm.add_route(Cdm.as_view(), '/<address>')
