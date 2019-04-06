@@ -39,8 +39,8 @@ class Parser:
     def __init__(self):
         self.height = 1
         self.last_block = None
-        self.step = 25
-        self.blocks_to_check = 25
+        self.step = 5
+        self.blocks_to_check = 5
 
         self.db_reconnects = 0
         self.db_max_reconnects = 10

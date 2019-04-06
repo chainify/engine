@@ -33,25 +33,26 @@ cdm = Blueprint('cdm_v1', url_prefix='/cdm')
 
 class Cdm(HTTPMethodView):
     @staticmethod
-    def get(request, address):
+    def get(request, alice, bob):
         
         data = {
-            'cdms': get_cdms(address),
+            'cdms': get_cdms(alice,bob),
         }
 
         return json(data, status=200)
 
-def get_cdms(address):
+def get_cdms(alice, bob):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, sender, recipient, attachment, timestamp, cnfy_id FROM transactions
-                    WHERE fee_asset_id='{asset_id}' AND (sender='{address}' OR recipient='{address}')
+                    WHERE (sender='{alice}' AND recipient='{bob}') 
+                    OR (sender='{bob}' AND recipient='{alice}') 
                     ORDER BY timestamp DESC""".format(
-                        asset_id=config['blockchain']['asset_id'],
-                        address=address
+                        alice=alice,
+                        bob=bob
                     ))
                 transactions = cur.fetchall()
 
@@ -60,7 +61,7 @@ def get_cdms(address):
                     ipsf_hash = base58.b58decode(tx[3]).decode("utf-8")
                     ipfs_data = read_ipfs_file(ipsf_hash)
 
-                    msg_type = 'incoming' if tx[1] == address else 'outgoing'
+                    msg_type = 'incoming' if tx[1] == bob else 'outgoing'
 
                     data = {
                         "id": tx[5],
@@ -81,4 +82,4 @@ def get_cdms(address):
     
     return cdms
 
-cdm.add_route(Cdm.as_view(), '/<address>')
+cdm.add_route(Cdm.as_view(), '/<alice>/<bob>')

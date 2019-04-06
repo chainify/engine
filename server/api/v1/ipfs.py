@@ -89,7 +89,6 @@ def create_ipfs_file(data):
 
 def read_ipfs_file(ipfs_hash):
     enc_data = requests.get('{0}/ipfs/{1}'.format(ipfs_get.host, ipfs_hash)).text
-
     if ipfs_init.enc_mothod == 'AES':
         data = crypto_aes.decrypt(enc_data)
     else:

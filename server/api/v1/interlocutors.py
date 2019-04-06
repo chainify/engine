@@ -33,12 +33,12 @@ dsn = {
 
 class Interlocutors(HTTPMethodView):
     @staticmethod
-    def get(request, address):
-        data = get_interlocutors(address)
+    def get(request, alice):
+        data = get_interlocutors(alice)
         return json({'interlocutors': data}, status=200 if len(data) > 0 else 204)
 
 
-def get_interlocutors(address):
+def get_interlocutors(alice):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
@@ -46,34 +46,33 @@ def get_interlocutors(address):
                 cur.execute("""
                     SELECT t.sender, t.recipient
                     FROM transactions t
-                    WHERE sender='{address}' OR recipient='{address}'
+                    WHERE sender='{alice}' OR recipient='{alice}'
                     ORDER BY timestamp DESC""".format(
-                        address=address
+                        alice=alice
                     ))
                 transactions = cur.fetchall()
 
-                addresses = []
+                bobs = []
                 for tx in transactions:
                     sender = tx[0]
                     recipient = tx[1]
 
-
                     if sender != recipient:
-                        interlocutor = sender if recipient == address else recipient
-                        if interlocutor not in addresses:
-                            addresses.append(interlocutor)
+                        interlocutor = sender if recipient == alice else recipient
+                        if interlocutor not in bobs:
+                            bobs.append(interlocutor)
 
                 accounts = []
-                for address in addresses:
-                    account = get_account(address)
+                for bob in bobs:
+                    account = get_account(bob)
                     if not account:
                         account = {
-                            'address': address,
+                            'address': bob,
                             'publicKey': '',
-                            'name': address,
+                            'name': bob,
                             'created': ''
                         }
-                    cdms = get_cdms(address)
+                    cdms = get_cdms(alice, bob)
 
                     accounts.append({
                         'account': account,
@@ -83,10 +82,10 @@ def get_interlocutors(address):
                         'cdm': None if len(cdms) == 0 else cdms[-1]
                     })
 
-
     except Exception as error:
         return bad_request(error)
+    
     return accounts
 
 
-interlocutors.add_route(Interlocutors.as_view(), '/<address>')
+interlocutors.add_route(Interlocutors.as_view(), '/<alice>')

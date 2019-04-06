@@ -11,3 +11,4 @@ base58 == 0.2.5
 python-socketio
 sanic-cors
 pycrypto
+plyvel

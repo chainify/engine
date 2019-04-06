@@ -18,6 +18,8 @@ RUN make altinstall
 
 RUN mkdir /root/.data
 RUN mkdir /root/.data/leveldb
+RUN mkdir /root/.data/leveldb/messenger
+RUN mkdir /root/.data/leveldb/sql
 
 WORKDIR /opt
 COPY requirements.txt /opt/requirements.txt

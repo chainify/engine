@@ -22,7 +22,8 @@ services:
     volumes:
       - ./server:/opt
       - ./server/config.ini:/opt/config.ini
-      - ~/.data/leveldb/chainify:/root/.data/leveldb
+      - ~/.data/leveldb/chainify/messenger:/root/.data/leveldb/messenger
+      - ~/.data/leveldb/chainify/sql:/root/.data/leveldb/sql
     networks:
       - postgres_default
       - default

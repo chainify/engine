@@ -6,6 +6,7 @@ from .accounts import account
 from .interlocutors import interlocutors
 from .transactions import transactions
 from .faucet import faucet
+from .sql import sql
 
 api_v1 = Blueprint.group(
   cdm,
@@ -15,6 +16,7 @@ api_v1 = Blueprint.group(
   interlocutors,
   transactions,
   faucet,
+  sql,
   url_prefix='/v1'
 )
 
