@@ -35,7 +35,7 @@ class Interlocutors(HTTPMethodView):
     @staticmethod
     def get(request, alice):
         data = get_interlocutors(alice)
-        return json({'interlocutors': data}, status=200 if len(data) > 0 else 204)
+        return json({'interlocutors': data}, status=200)
 
 
 def get_interlocutors(alice):
@@ -46,11 +46,27 @@ def get_interlocutors(alice):
                 cur.execute("""
                     SELECT t.sender, t.recipient
                     FROM transactions t
-                    WHERE sender='{alice}' OR recipient='{alice}'
+                    WHERE (sender='{alice}' OR recipient='{alice}')
+                    AND t.valid = 1
                     ORDER BY timestamp DESC""".format(
                         alice=alice
                     ))
                 transactions = cur.fetchall()
+
+                # # groups = []
+                # group_txs = []
+                # non_group_txs = []
+                # attachments = []
+                # for tx in transactions:
+                #     att = tx[3]
+                #     if att in attachments:
+                #         group_txs.append(tx)
+                #     else:
+                #         non_group_txs.append(tx)
+                #         attachments.append(att)
+
+                # print('***non_group_txs')
+                # print(non_group_txs)
 
                 bobs = []
                 for tx in transactions:
@@ -63,7 +79,7 @@ def get_interlocutors(alice):
                             bobs.append(interlocutor)
 
                 accounts = []
-                for bob in bobs:
+                for index, bob in enumerate(bobs):
                     account = get_account(bob)
                     if not account:
                         account = {
@@ -73,14 +89,34 @@ def get_interlocutors(alice):
                             'created': ''
                         }
                     cdms = get_cdms(alice, bob)
-
+                    
                     accounts.append({
-                        'account': account,
+                        'index': index,
+                        'accounts': [account],
                         'totalCdms': len(cdms),
-                        'readCdms': 0,
-                        'newCdms': 0,
                         'cdm': None if len(cdms) == 0 else cdms[-1]
                     })
+                
+                # accounts.append({
+                #     'index': len(accounts) + 1,
+                #     'accounts': [
+                #         {
+                #             'address': '3N7ji8NgvVDDMKxtPY3jRV6xM7JTjMrw2Xk',
+                #             'publicKey': '6xFRZDmMT4DWmvVLyD8t3KbwzUXyusRRpEjPWCwFeo6k',
+                #             'name': 'Fred',
+                #             'created': ''
+                #         },
+                #         {
+                #             'address': '3MquQjG5Grs4EF1JUgkZ1RLQ2Hife7GsSAp',
+                #             'publicKey': '2zRUoYjmWL6Mp7m3dv2EgVkSPLFA5jPqLYV1DfYhrnTD',
+                #             'name': 'Greg',
+                #             'created': ''
+                #         }
+                #     ],
+                #     'totalCdms': 0,
+                #     'cdm': None
+                # })
+
 
     except Exception as error:
         return bad_request(error)

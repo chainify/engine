@@ -80,7 +80,8 @@ class Parser:
                 data = pjson.loads(data)
                 cnfy_id = 'cnfy-{}'.format(str(uuid.uuid4()))
                 for tx in data['transactions']:
-                    if tx['type'] == 4 and tx['feeAssetId'] == config['blockchain']['asset_id']:
+                    if tx['type'] in [4] and tx['feeAssetId'] == config['blockchain']['asset_id']:
+
                         tx_data = (
                             tx['id'],
                             data['height'],

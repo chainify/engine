@@ -7,6 +7,7 @@ from .interlocutors import interlocutors
 from .transactions import transactions
 from .faucet import faucet
 from .sql import sql
+from .proofs import proofs
 
 api_v1 = Blueprint.group(
   cdm,
@@ -17,6 +18,7 @@ api_v1 = Blueprint.group(
   transactions,
   faucet,
   sql,
+  proofs,
   url_prefix='/v1'
 )
 

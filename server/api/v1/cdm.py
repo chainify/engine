@@ -48,8 +48,9 @@ def get_cdms(alice, bob):
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT id, sender, recipient, attachment, timestamp, cnfy_id FROM transactions
-                    WHERE (sender='{alice}' AND recipient='{bob}') 
-                    OR (sender='{bob}' AND recipient='{alice}') 
+                    WHERE ((sender='{alice}' AND recipient='{bob}') 
+                    OR (sender='{bob}' AND recipient='{alice}'))
+                    AND valid = 1
                     ORDER BY timestamp DESC""".format(
                         alice=alice,
                         bob=bob
