@@ -36,7 +36,7 @@ class Cdm(HTTPMethodView):
     def get(request, alice, bob):
         
         data = {
-            'cdms': get_cdms(alice,bob),
+            'cdm': get_cdms(alice,bob),
         }
 
         return json(data, status=200)
