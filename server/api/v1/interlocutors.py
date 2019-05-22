@@ -44,54 +44,58 @@ def get_interlocutors(alice):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT t.sender, t.recipient
-                    FROM transactions t
-                    WHERE (sender='{alice}' OR recipient='{alice}')
+                    SELECT c.sender, c.recipient
+                    FROM cdms c
+                    LEFT JOIN transactions t ON c.tx_id = t.id
+                    WHERE (c.sender='{alice}' OR c.recipient='{alice}')
                     AND t.valid = 1
-                    ORDER BY timestamp DESC""".format(
+                    ORDER BY t.timestamp DESC""".format(
                         alice=alice
                     ))
-                transactions = cur.fetchall()
-
-                # # groups = []
-                # group_txs = []
-                # non_group_txs = []
-                # attachments = []
-                # for tx in transactions:
-                #     att = tx[3]
-                #     if att in attachments:
-                #         group_txs.append(tx)
-                #     else:
-                #         non_group_txs.append(tx)
-                #         attachments.append(att)
-
-                # print('***non_group_txs')
-                # print(non_group_txs)
+                    
+                cdms = cur.fetchall()
 
                 bobs = []
-                for tx in transactions:
-                    sender = tx[0]
-                    recipient = tx[1]
+                for cdm in cdms:
+                    sender = cdm[0]
+                    recipient = cdm[1]
 
                     if sender != recipient:
                         interlocutor = sender if recipient == alice else recipient
                         if interlocutor not in bobs:
                             bobs.append(interlocutor)
+                    
+                    # if sender == recipient and sender == alice:
+                    #     if alice not in bobs:
+                    #         bobs.insert(0, alice)
 
-                accounts = []
+                selfAccount = get_account(alice)
+                if selfAccount:
+                    selfAccount['name'] = 'SAVED'
+                selfCdms = get_cdms(alice, alice)
+                accounts = [{
+                    'index': 0,
+                    'accounts': [selfAccount or {
+                        'publicKey': alice,
+                        'name': 'SAVED',
+                        'created': ''
+                    }],
+                    'totalCdms': len(selfCdms),
+                    'cdm': None if len(selfCdms) == 0 else selfCdms[-1]
+                }]
+
                 for index, bob in enumerate(bobs):
                     account = get_account(bob)
                     if not account:
                         account = {
-                            'address': bob,
-                            'publicKey': '',
+                            'publicKey': bob,
                             'name': bob,
                             'created': ''
                         }
                     cdms = get_cdms(alice, bob)
                     
                     accounts.append({
-                        'index': index,
+                        'index': index + 1,
                         'accounts': [account],
                         'totalCdms': len(cdms),
                         'cdm': None if len(cdms) == 0 else cdms[-1]

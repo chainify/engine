@@ -10,11 +10,12 @@ from .errors import bad_request
 import configparser
 import base58
 from .accounts import get_account
-from .ipfs import read_ipfs_file
+from .ipfs import create_ipfs_file, read_ipfs_file
 from time import time
 import websockets
 import contextvars
 import collections
+import pywaves as pw
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -33,15 +34,89 @@ cdm = Blueprint('cdm_v1', url_prefix='/cdm')
 
 class Cdm(HTTPMethodView):
     @staticmethod
-    def get(request, alice, bob):
-        
+    def post(request):
+        message = request.form['message'][0]
+        recipient = request.form['recipient'][0]
+        tx = send_cdm(message, recipient)
+
         data = {
-            'cdm': get_cdms(alice,bob),
+            'message': message,
+            'recipient': recipient,
+            'tx': tx
         }
 
+        return json(data, status=(201 if tx else 200))
+
+    @staticmethod
+    def get(request, alice, bob):
+        data = {
+            'cdms': get_cdms(alice, bob)
+        }
         return json(data, status=200)
 
+def send_cdm(message, recipient):
+    pw.setNode(node=config['blockchain']['host'], chain='testnet')
+    seed = pw.Asset(config['blockchain']['seed'])
+    sponsor = pw.Address(seed=seed)
+    
+    asset = pw.Asset(config['blockchain']['asset_id'])
+    feeAsset = pw.Asset(config['blockchain']['asset_id'])
+    attachment = create_ipfs_file(message)
+
+    tx = sponsor.sendAsset(
+        recipient = recipient,
+        asset = asset,
+        feeAsset = feeAsset,
+        amount = 1,
+        attachment = attachment['Hash'])
+
+    return tx
+
 def get_cdms(alice, bob):
+    conn = psycopg2.connect(**dsn)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT t.cnfy_id, t.id, c.sender, c.recipient, c.message, c.hash, c.signature, t.timestamp
+                    FROM cdms c
+                    LEFT JOIN transactions t ON c.tx_id = t.id
+                    WHERE ((c.sender='{alice}' AND c.recipient='{bob}') 
+                    OR (c.sender='{bob}' AND c.recipient='{alice}'))
+                    AND t.valid = 1
+                    ORDER BY t.timestamp DESC""".format(
+                        alice=alice,
+                        bob=bob
+                    ))
+                records = cur.fetchall()
+
+                cdms = []
+                for record in records:
+                    data = {
+                        "id": record[0],
+                        "txId": record[1],
+                        "sender": record[2],
+                        "recipient": record[3],
+                        "message": record[4],
+                        "hash": record[5],
+                        "signature": record[6],
+                        "timestamp": record[7]
+                    }
+
+                    if record[2] != record[3]:
+                        data['type'] = 'incoming' if record[2] == bob else 'outgoing'
+                    else:
+                        data['type'] = 'outgoing'
+
+                    cdms.insert(0, data)
+
+
+    except Exception as error:
+        return bad_request(error)
+    
+    return cdms
+
+def get_cdms1(alice, bob):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
@@ -62,7 +137,12 @@ def get_cdms(alice, bob):
                     ipsf_hash = base58.b58decode(tx[3]).decode("utf-8")
                     ipfs_data = read_ipfs_file(ipsf_hash)
 
-                    msg_type = 'incoming' if tx[1] == bob else 'outgoing'
+
+                    if tx[1] != tx[2]:
+                        msg_type = 'incoming' if tx[1] == bob else 'outgoing'
+                    else:
+                        msg_type = 'outgoing'
+
 
                     data = {
                         "id": tx[5],
@@ -75,8 +155,7 @@ def get_cdms(alice, bob):
                         "type": msg_type
                     }
 
-                    if data['sender'] != data['recipient']:
-                        cdms.insert(0, data)
+                    cdms.insert(0, data)
 
     except Exception as error:
         return bad_request(error)

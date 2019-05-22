@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 from sanic import Blueprint
 from sanic.response import json
 from sanic.log import logger
@@ -19,12 +20,13 @@ import configparser
 import uuid
 import signal
 import subprocess
+import base58
 
 config = configparser.ConfigParser()
 config.read('config.ini')
 
 parser = Blueprint('parser_v1', url_prefix='/parser')
-email = sendgrid.SendGridAPIClient(apikey=config['email']['api_key'])
+# email = sendgrid.SendGridAPIClient(apikey=config['email']['api_key'])
 dsn = {
     "user": config['DB']['user'],
     "password": config['DB']['password'],
@@ -48,6 +50,7 @@ class Parser:
 
         self.sql_data_transactions = []
         self.sql_data_proofs = []
+        self.sql_data_cdms = []
 
     async def emergency_stop_loop(self, title, error):
         # email_body = """
@@ -81,7 +84,6 @@ class Parser:
                 cnfy_id = 'cnfy-{}'.format(str(uuid.uuid4()))
                 for tx in data['transactions']:
                     if tx['type'] in [4] and tx['feeAssetId'] == config['blockchain']['asset_id']:
-
                         tx_data = (
                             tx['id'],
                             data['height'],
@@ -104,6 +106,36 @@ class Parser:
 
                         for proof in tx['proofs']:
                             self.sql_data_proofs.append((tx['id'], proof))
+                        
+                        attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
+                        attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
+
+                        sha256_hash = None
+                        sender = None
+                        signature = None
+
+                        sha256_regex = r"^-----BEGIN_SHA256-----$\n(.*)\n^-----END_SHA256-----$"
+                        sha256_matches = re.finditer(sha256_regex, attachment, re.MULTILINE)
+
+                        for match in sha256_matches:
+                            sha256_hash = match.groups()[0]
+
+                        signature_regex = r"^-----BEGIN_SIGNATURE (.*)-----$\n(.*)\n^-----END_SIGNATURE (.*)-----$"
+                        signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
+
+                        for match in signature_matches:
+                            sender = match.groups()[0]
+                            signature = match.groups()[1]
+
+                        messages_regex = r"^-----BEGIN_PK (.*)-----$\n(.*)\n^-----END_PK (.*)-----$"
+                        messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
+
+                        for match in messages_matches:
+                            cdm_id = str(uuid.uuid4())
+                            recipient = match.groups()[0]
+                            message = match.groups()[1]
+                            self.sql_data_cdms.append((
+                                cdm_id, tx['id'], sender, recipient, message, sha256_hash, signature))
 
         except asyncio.CancelledError:
             logger.info('Parser has been stopped')
@@ -127,6 +159,10 @@ class Parser:
 
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
+
+                        sql = """INSERT INTO cdms (id, tx_id, sender, recipient, message, hash, signature)
+                        VALUES %s ON CONFLICT DO NOTHING"""
+                        execute_values(cur, sql, self.sql_data_cdms)
 
                     conn.commit()
                     logger.info('Saved {0} transactions'.format(self.transactions_inserted))
@@ -157,9 +193,10 @@ class Parser:
                         if max_height[0] > self.blocks_to_check:
                             self.height = max_height[0] - self.blocks_to_check
 
-                    start_height = int(config['blockchain']['start_height'])
-                    if config['blockchain']['start_height'] and self.height < start_height:
-                        self.height = start_height
+                    if config['blockchain']['start_height']:
+                        start_height = int(config['blockchain']['start_height'])
+                        if self.height < start_height:
+                            self.height = start_height
 
         except Exception as error:
             logger.error('Max height request error: {}'.format(error))
@@ -173,9 +210,9 @@ class Parser:
             except Exception as error:
                 await self.emergency_stop_loop('Waves node is not responding', error)
 
+            logger.info('Start height: {}, last block: {}'.format(self.height, self.last_block))
+            logger.info('-' * 40)
             try:
-                logger.info('Start height: {}, last block: {}'.format(self.height, self.last_block))
-                logger.info('-' * 40)
                 async with aiohttp.ClientSession() as session:
                     try:
                         while self.height < self.last_block:

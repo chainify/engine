@@ -9,3 +9,4 @@ aiopg
 asyncpg
 gino
 configparser
+base58

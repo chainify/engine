@@ -61,19 +61,19 @@ class Accounts(HTTPMethodView):
 
 class Account(HTTPMethodView):
     @staticmethod
-    def get(request, address):
-        data = get_account(address)
+    def get(request, public_key):
+        data = get_account(public_key)
         return json(data, status=200 if data else 204)
 
 
-def get_account(address):
+def get_account(public_key):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute(f"""
                         SELECT address, public_key, name, created FROM accounts
-                        WHERE address='{address}'
+                        WHERE public_key='{public_key}'
                     """)
                 res = cur.fetchone()
 
