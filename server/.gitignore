@@ -6,6 +6,7 @@ project
 pycharm
 
 config.ini
+config.stage.ini
 config.prod.ini
 
 *.pyc

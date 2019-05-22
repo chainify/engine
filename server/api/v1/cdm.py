@@ -56,8 +56,7 @@ class Cdm(HTTPMethodView):
 
 def send_cdm(message, recipient):
     pw.setNode(node=config['blockchain']['host'], chain='testnet')
-    seed = pw.Asset(config['blockchain']['seed'])
-    sponsor = pw.Address(seed=seed)
+    sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
     
     asset = pw.Asset(config['blockchain']['asset_id'])
     feeAsset = pw.Asset(config['blockchain']['asset_id'])
@@ -162,4 +161,5 @@ def get_cdms1(alice, bob):
     
     return cdms
 
+cdm.add_route(Cdm.as_view(), '/')
 cdm.add_route(Cdm.as_view(), '/<alice>/<bob>')
