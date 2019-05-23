@@ -1,5 +1,6 @@
 from sanic import Sanic
 import os
+import time
 from sanic import Blueprint
 from sanic.views import HTTPMethodView
 from sanic.response import text
@@ -65,9 +66,6 @@ def get_interlocutors(alice):
                         if interlocutor not in bobs:
                             bobs.append(interlocutor)
                     
-                    # if sender == recipient and sender == alice:
-                    #     if alice not in bobs:
-                    #         bobs.insert(0, alice)
 
                 selfAccount = get_account(alice)
                 if selfAccount:
@@ -89,8 +87,9 @@ def get_interlocutors(alice):
                     if not account:
                         account = {
                             'publicKey': bob,
-                            'name': bob,
-                            'created': ''
+                            'name': None,
+                            'created': int(time.time()),
+                            'lastActive': None
                         }
                     cdms = get_cdms(alice, bob)
                     
@@ -101,26 +100,6 @@ def get_interlocutors(alice):
                         'cdm': None if len(cdms) == 0 else cdms[-1]
                     })
                 
-                # accounts.append({
-                #     'index': len(accounts) + 1,
-                #     'accounts': [
-                #         {
-                #             'address': '3N7ji8NgvVDDMKxtPY3jRV6xM7JTjMrw2Xk',
-                #             'publicKey': '6xFRZDmMT4DWmvVLyD8t3KbwzUXyusRRpEjPWCwFeo6k',
-                #             'name': 'Fred',
-                #             'created': ''
-                #         },
-                #         {
-                #             'address': '3MquQjG5Grs4EF1JUgkZ1RLQ2Hife7GsSAp',
-                #             'publicKey': '2zRUoYjmWL6Mp7m3dv2EgVkSPLFA5jPqLYV1DfYhrnTD',
-                #             'name': 'Greg',
-                #             'created': ''
-                #         }
-                #     ],
-                #     'totalCdms': 0,
-                #     'cdm': None
-                # })
-
 
     except Exception as error:
         return bad_request(error)

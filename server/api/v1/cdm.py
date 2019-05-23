@@ -9,7 +9,6 @@ import psycopg2
 from .errors import bad_request
 import configparser
 import base58
-from .accounts import get_account
 from .ipfs import create_ipfs_file, read_ipfs_file
 from time import time
 import websockets

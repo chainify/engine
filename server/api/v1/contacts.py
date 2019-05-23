@@ -1,8 +1,6 @@
 from sanic import Sanic
 import os
 import time
-from datetime import datetime
-
 from sanic import Blueprint
 from sanic.views import HTTPMethodView
 from sanic.response import text
@@ -17,8 +15,8 @@ from .errors import bad_request
 import configparser
 import base58
 
-accounts = Blueprint('accounts_v1', url_prefix='/accounts')
-account = Blueprint('account_v1', url_prefix='/account')
+contacts = Blueprint('contacts_v1', url_prefix='/contacts')
+contact = Blueprint('contact_v1', url_prefix='/contact')
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -33,23 +31,26 @@ dsn = {
 }
 
 
-class Accounts(HTTPMethodView):
+class Contact(HTTPMethodView):
 
     @staticmethod
     def post(request):
+        account = request.form['account'][0]
         public_key = request.form['publicKey'][0]
-        last_active = datetime.now()
-
+        name = request.form['name'][0]
+        contact_id = str(uuid.uuid4())
         try:
             conn = psycopg2.connect(**dsn)
             with conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        INSERT INTO accounts (public_key) VALUES ('{public_key}')
-                        ON CONFLICT (public_key) DO UPDATE SET last_active='{last_active}'
+                        INSERT INTO contacts (id, account, public_key, name)
+                        VALUES ('{id}', '{account}', '{public_key}', '{name}')
                     """.format(
+                        id=contact_id,
+                        account=account,
                         public_key=public_key,
-                        last_active=last_active
+                        name=name
                     ))
                     conn.commit()
         except Exception as error:
@@ -63,82 +64,70 @@ class Accounts(HTTPMethodView):
 
     @staticmethod
     def put(request):
+        account = request.form['account'][0]
         public_key = request.form['publicKey'][0]
-        last_active = int(time.time())
+        name = request.form['name'][0]
+
         try:
             conn = psycopg2.connect(**dsn)
             with conn:
                 with conn.cursor() as cur:
-                    cur.execute("""SELECT COUNT(*) FROM accounts WHERE public_key='{public_key}'""".format(
+                    cur.execute("""
+                        UPDATE contacts SET name='{name}'
+                        WHERE account='{account}'
+                        AND public_key='{public_key}'
+                    """.format(
+                        name=name,
+                        account=account,
                         public_key=public_key
                     ))
-                    count = cur.fetchone()[0]
-
-                    if count > 0:
-                        cur.execute("""
-                            UPDATE accounts SET last_active='{last_active}')
-                            WHERE public_key='{public_key}'
-                        """.format(
-                            public_key=public_key,
-                            last_active=last_active
-                        ))
-                        conn.commit()
-                        
-                    else:
-                        cur.execute("""
-                            INSERT INTO accounts (public_key) VALUES ('{public_key}')
-                        """.format(
-                            public_key=public_key
-                        ))
-                        conn.commit()
-
+                    conn.commit()
         except Exception as error:
             return bad_request(error)
 
         data = {
+            'account': account,
             'publicKey': public_key,
-            'lastActive': last_active
+            'name': name
         }
 
         return json(data, status=200)
 
 
-class Account(HTTPMethodView):
+class Contacts(HTTPMethodView):
     @staticmethod
     def get(request, public_key):
-        data = get_account(public_key)
+        data = {
+            'contacts': get_contacts(public_key)
+        }
         return json(data, status=200 if data else 204)
 
 
-def get_account(public_key):
+def get_contacts(public_key):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                        SELECT a.last_active, a.created, c.name FROM accounts a
-                        LEFT JOIN contacts c ON c.account = a.public_key
-                        WHERE a.public_key='{public_key}'
+                        SELECT id, public_key, name, created FROM contacts
+                        WHERE account='{public_key}'
                     """.format(
                         public_key=public_key
                     ))
-                res = cur.fetchone()
-
-                if not res:
-                    return ''
+                contacts = cur.fetchone()
 
     except Exception as error:
         return bad_request(error)
 
-    data = {
-        'publicKey': public_key,
-        'lastActive': res[0],
-        'created': res[1],
-        'name': res[2]
-    }
+    data = [{
+        'id': contact[0],
+        'publicKey': contact[1],
+        'name': contact[2],
+        'created': contact[3]
+    } for contact in contacts]
 
     return data
 
 
-accounts.add_route(Accounts.as_view(), '/')
-account.add_route(Account.as_view(), '/<public_key>')
+contact.add_route(Contact.as_view(), '/')
+contacts.add_route(Contacts.as_view(), '/<public_key>')

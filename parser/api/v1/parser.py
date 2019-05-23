@@ -109,31 +109,31 @@ class Parser:
                         
                         attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
-
+                        
                         sha256_hash = None
                         sender = None
                         signature = None
 
-                        sha256_regex = r"^-----BEGIN_SHA256-----$\n(.*)\n^-----END_SHA256-----$"
+                        sha256_regex = r"-----BEGIN_SHA256-----(\n|\r\n)(.*)(\n|\r\n)-----END_SHA256-----"
                         sha256_matches = re.finditer(sha256_regex, attachment, re.MULTILINE)
 
                         for match in sha256_matches:
-                            sha256_hash = match.groups()[0]
+                            sha256_hash = match.groups()[1]
 
-                        signature_regex = r"^-----BEGIN_SIGNATURE (.*)-----$\n(.*)\n^-----END_SIGNATURE (.*)-----$"
+                        signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
                         signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
 
                         for match in signature_matches:
                             sender = match.groups()[0]
-                            signature = match.groups()[1]
+                            signature = match.groups()[2]
 
-                        messages_regex = r"^-----BEGIN_PK (.*)-----$\n(.*)\n^-----END_PK (.*)-----$"
+                        messages_regex = r"-----BEGIN_PK (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PK (.*)-----"
                         messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
 
                         for match in messages_matches:
                             cdm_id = str(uuid.uuid4())
                             recipient = match.groups()[0]
-                            message = match.groups()[1]
+                            message = match.groups()[2]
                             self.sql_data_cdms.append((
                                 cdm_id, tx['id'], sender, recipient, message, sha256_hash, signature))
 
