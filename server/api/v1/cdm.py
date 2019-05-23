@@ -63,7 +63,7 @@ def send_cdm(message, recipient):
     attachment = create_ipfs_file(message)
 
     tx = sponsor.sendAsset(
-        recipient = recipient,
+        recipient = pw.Address(recipient),
         asset = asset,
         feeAsset = feeAsset,
         amount = 1,
@@ -91,6 +91,14 @@ def get_cdms(alice, bob):
 
                 cdms = []
                 for record in records:
+                    cur.execute("""
+                        SELECT recipient FROM cdms
+                        WHERE tx_id='{tx_id}'
+                    """.format(
+                        tx_id=record[1]
+                    ))
+                    recipients = cur.fetchall()
+
                     data = {
                         "id": record[0],
                         "txId": record[1],
@@ -99,7 +107,8 @@ def get_cdms(alice, bob):
                         "message": record[4],
                         "hash": record[5],
                         "signature": record[6],
-                        "timestamp": record[7]
+                        "timestamp": record[7],
+                        "recipients": [el[0] for el in recipients]
                     }
 
                     if record[2] != record[3]:
@@ -109,52 +118,6 @@ def get_cdms(alice, bob):
 
                     cdms.insert(0, data)
 
-
-    except Exception as error:
-        return bad_request(error)
-    
-    return cdms
-
-def get_cdms1(alice, bob):
-    conn = psycopg2.connect(**dsn)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT id, sender, recipient, attachment, timestamp, cnfy_id FROM transactions
-                    WHERE ((sender='{alice}' AND recipient='{bob}') 
-                    OR (sender='{bob}' AND recipient='{alice}'))
-                    AND valid = 1
-                    ORDER BY timestamp DESC""".format(
-                        alice=alice,
-                        bob=bob
-                    ))
-                transactions = cur.fetchall()
-
-                cdms = []
-                for tx in transactions:
-                    ipsf_hash = base58.b58decode(tx[3]).decode("utf-8")
-                    ipfs_data = read_ipfs_file(ipsf_hash)
-
-
-                    if tx[1] != tx[2]:
-                        msg_type = 'incoming' if tx[1] == bob else 'outgoing'
-                    else:
-                        msg_type = 'outgoing'
-
-
-                    data = {
-                        "id": tx[5],
-                        "txId": tx[0],
-                        "sender": tx[1],
-                        "recipient": tx[2],
-                        "attachment": tx[3],
-                        "timestamp": tx[4],
-                        "message": ipfs_data,
-                        "type": msg_type
-                    }
-
-                    cdms.insert(0, data)
 
     except Exception as error:
         return bad_request(error)
