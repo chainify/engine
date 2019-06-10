@@ -29,7 +29,8 @@ dsn = {
     "database": config['DB']['database'],
     "host": config['DB']['host'],
     "port": config['DB']['port'],
-    "sslmode": config['DB']['sslmode']
+    "sslmode": config['DB']['sslmode'],
+    "target_session_attrs": config['DB']['target_session_attrs']
 }
 
 
@@ -116,25 +117,44 @@ def get_account(public_key):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                        SELECT a.last_active, a.created, c.name FROM accounts a
-                        LEFT JOIN contacts c ON c.account = a.public_key
+                        SELECT c.first_name, c.last_name
+                        FROM contacts c
+                        WHERE c.public_key='{public_key}'
+                    """.format(
+                        public_key=public_key
+                    ))
+                contact = cur.fetchone()
+
+                cur.execute("""
+                        SELECT a.created, a.last_active
+                        FROM accounts a
                         WHERE a.public_key='{public_key}'
                     """.format(
                         public_key=public_key
                     ))
-                res = cur.fetchone()
-
-                if not res:
-                    return ''
+                account = cur.fetchone()
 
     except Exception as error:
         return bad_request(error)
 
+    first_name = None
+    last_name = None
+    created = None
+    last_active = None
+    if account:
+        created = account[0]
+        last_active = account[1] or account[0]
+
+    if contact:
+        first_name = contact[0]
+        last_name = contact[1]
+
     data = {
         'publicKey': public_key,
-        'lastActive': res[0],
-        'created': res[1],
-        'name': res[2]
+        'created': created,
+        'lastActive': last_active,
+        'firstName': first_name,
+        'lastName': last_name
     }
 
     return data

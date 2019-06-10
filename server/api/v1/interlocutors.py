@@ -12,6 +12,7 @@ import aiohttp
 import requests
 import psycopg2
 from .accounts import get_account
+from .contacts import get_contacts
 from .cdm import get_cdms
 from .errors import bad_request
 import configparser
@@ -28,15 +29,19 @@ dsn = {
     "database": config['DB']['database'],
     "host": config['DB']['host'],
     "port": config['DB']['port'],
-    "sslmode": config['DB']['sslmode']
+    "sslmode": config['DB']['sslmode'],
+    "target_session_attrs": config['DB']['target_session_attrs']
 }
 
 
 class Interlocutors(HTTPMethodView):
     @staticmethod
     def get(request, alice):
-        data = get_interlocutors(alice)
-        return json({'interlocutors': data}, status=200)
+        data = {
+            'contacts': get_contacts(alice),
+            'interlocutors': get_interlocutors(alice)
+        }
+        return json(data, status=200)
 
 
 def get_interlocutors(alice):
@@ -45,15 +50,15 @@ def get_interlocutors(alice):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT c.sender, c.recipient
+                    SELECT s.sender, c.recipient, tx_id
                     FROM cdms c
                     LEFT JOIN transactions t ON c.tx_id = t.id
-                    WHERE (c.sender='{alice}' OR c.recipient='{alice}')
+                    LEFT JOIN senders s ON s.cdm_id = c.id
+                    WHERE (s.sender='{alice}' OR c.recipient='{alice}')
                     AND t.valid = 1
                     ORDER BY t.timestamp DESC""".format(
                         alice=alice
                     ))
-                    
                 cdms = cur.fetchall()
 
                 bobs = []
@@ -65,18 +70,20 @@ def get_interlocutors(alice):
                         interlocutor = sender if recipient == alice else recipient
                         if interlocutor not in bobs:
                             bobs.append(interlocutor)
-                    
 
                 selfAccount = get_account(alice)
                 if selfAccount:
                     selfAccount['name'] = 'SAVED'
                 selfCdms = get_cdms(alice, alice)
+
                 accounts = [{
                     'index': 0,
                     'accounts': [selfAccount or {
                         'publicKey': alice,
-                        'name': 'SAVED',
-                        'created': ''
+                        'firstName': None,
+                        'lastName': None,
+                        'created': '',
+                        'lastActive': ''
                     }],
                     'totalCdms': len(selfCdms),
                     'cdm': None if len(selfCdms) == 0 else selfCdms[-1]
@@ -87,15 +94,17 @@ def get_interlocutors(alice):
                     if not account:
                         account = {
                             'publicKey': bob,
-                            'name': None,
+                            'firstName': None,
+                            'lastName': None,
                             'created': int(time.time()),
-                            'lastActive': None
+                            'lastActive': int(time.time())
                         }
                     cdms = get_cdms(alice, bob)
                     
                     accounts.append({
                         'index': index + 1,
                         'accounts': [account],
+                        'groupHash': '',
                         'totalCdms': len(cdms),
                         'cdm': None if len(cdms) == 0 else cdms[-1]
                     })

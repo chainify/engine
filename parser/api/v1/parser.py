@@ -33,7 +33,8 @@ dsn = {
     "database": config['DB']['database'],
     "host": config['DB']['host'],
     "port": config['DB']['port'],
-    "sslmode": config['DB']['sslmode']
+    "sslmode": config['DB']['sslmode'],
+    "target_session_attrs": config['DB']['target_session_attrs']
 }
 
 
@@ -51,6 +52,7 @@ class Parser:
         self.sql_data_transactions = []
         self.sql_data_proofs = []
         self.sql_data_cdms = []
+        self.sql_data_senders = []
 
     async def emergency_stop_loop(self, title, error):
         # email_body = """
@@ -101,6 +103,7 @@ class Parser:
                             datetime.fromtimestamp(tx['timestamp'] / 1e3),
                             cnfy_id
                         )
+                        
 
                         self.sql_data_transactions.append(tx_data)
 
@@ -110,32 +113,32 @@ class Parser:
                         attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         
-                        sha256_hash = None
-                        sender = None
-                        signature = None
-
-                        sha256_regex = r"-----BEGIN_SHA256-----(\n|\r\n)(.*)(\n|\r\n)-----END_SHA256-----"
-                        sha256_matches = re.finditer(sha256_regex, attachment, re.MULTILINE)
-
-                        for match in sha256_matches:
-                            sha256_hash = match.groups()[1]
-
-                        signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
-                        signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
-
-                        for match in signature_matches:
-                            sender = match.groups()[0]
-                            signature = match.groups()[2]
-
-                        messages_regex = r"-----BEGIN_PK (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PK (.*)-----"
+                        messages_regex = r"-----BEGIN_PUBLIC_KEY (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PUBLIC_KEY (.*)-----"
                         messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
 
                         for match in messages_matches:
-                            cdm_id = str(uuid.uuid4())
-                            recipient = match.groups()[0]
-                            message = match.groups()[2]
-                            self.sql_data_cdms.append((
-                                cdm_id, tx['id'], sender, recipient, message, sha256_hash, signature))
+                            cdm_id = 'cdm-' + str(uuid.uuid4())
+                            recipient = match.groups()[0].strip()
+                            message = match.groups()[2].strip()
+
+                            sha256_hash = None
+                            sha256_regex = r"-----BEGIN_SHA256 " + re.escape(recipient) + r"-----(\n|\r\n)(.*)(\n|\r\n)-----END_SHA256 " + re.escape(recipient) + r"-----"
+                            sha256_matches = re.finditer(sha256_regex, attachment, re.MULTILINE)
+
+                            for match in sha256_matches:
+                                sha256_hash = match.groups()[1].strip()
+
+                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash))
+
+                            signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
+                            signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
+
+                            for match in signature_matches:
+                                sender_id = str(uuid.uuid4())
+                                sender = match.groups()[0].strip()
+                                signature = match.groups()[2].strip()
+
+                                self.sql_data_senders.append((sender_id, cdm_id, sender, signature, True))
 
         except asyncio.CancelledError:
             logger.info('Parser has been stopped')
@@ -160,9 +163,13 @@ class Parser:
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
 
-                        sql = """INSERT INTO cdms (id, tx_id, sender, recipient, message, hash, signature)
+                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash)
                         VALUES %s ON CONFLICT DO NOTHING"""
-                        execute_values(cur, sql, self.sql_data_cdms)
+                        execute_values(cur, sql, self.sql_data_cdms)        
+
+                        sql = """INSERT INTO senders (id, cdm_id, sender, signature, verified)
+                        VALUES %s ON CONFLICT DO NOTHING"""
+                        execute_values(cur, sql, self.sql_data_senders)                     
 
                     conn.commit()
                     logger.info('Saved {0} transactions'.format(self.transactions_inserted))
@@ -180,6 +187,8 @@ class Parser:
             self.transactions_inserted = 0
             self.sql_data_transactions = []
             self.sql_data_proofs = []
+            self.sql_data_cdms = []
+            self.sql_data_senders = []
 
     async def start(self):
         conn = psycopg2.connect(**dsn)

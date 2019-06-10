@@ -15,6 +15,8 @@ import websockets
 import contextvars
 import collections
 import pywaves as pw
+import datetime
+from .accounts import get_account
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -25,7 +27,8 @@ dsn = {
     "database": config['DB']['database'],
     "host": config['DB']['host'],
     "port": config['DB']['port'],
-    "sslmode": config['DB']['sslmode']
+    "sslmode": config['DB']['sslmode'],
+    "target_session_attrs": config['DB']['target_session_attrs']
 }
 
 cdm = Blueprint('cdm_v1', url_prefix='/cdm')
@@ -62,7 +65,7 @@ def send_cdm(message, recipient):
     attachment = create_ipfs_file(message)
 
     tx = sponsor.sendAsset(
-        recipient = pw.Address(recipient),
+        recipient = pw.Address(publicKey=recipient),
         asset = asset,
         feeAsset = feeAsset,
         amount = 1,
@@ -76,11 +79,12 @@ def get_cdms(alice, bob):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT t.cnfy_id, t.id, c.sender, c.recipient, c.message, c.hash, c.signature, t.timestamp
+                    SELECT t.cnfy_id, t.id, c.recipient, c.message, c.hash, t.timestamp
                     FROM cdms c
                     LEFT JOIN transactions t ON c.tx_id = t.id
-                    WHERE ((c.sender='{alice}' AND c.recipient='{bob}') 
-                    OR (c.sender='{bob}' AND c.recipient='{alice}'))
+                    LEFT JOIN senders s ON s.cdm_id = c.id
+                    WHERE ((s.sender='{alice}' AND c.recipient='{bob}') 
+                    OR (s.sender='{bob}' AND c.recipient='{alice}'))
                     AND t.valid = 1
                     ORDER BY t.timestamp DESC""".format(
                         alice=alice,
@@ -98,23 +102,32 @@ def get_cdms(alice, bob):
                     ))
                     recipients = cur.fetchall()
 
+                    # cur.execute("""
+                    #     SELECT c.recipient
+                    #     FROM cdms c
+                    #     WHERE c.hash='{hash}'
+                    #     ORDER BY timestamp
+                    # """.format(
+                    #     hash=record[4]
+                    # ))
+                    # forwarded = cur.fetchall()
+                    # forward_init = forwarded.pop(0)
+
                     data = {
                         "id": record[0],
                         "txId": record[1],
-                        "sender": record[2],
-                        "recipient": record[3],
-                        "message": record[4],
-                        "hash": record[5],
-                        "signature": record[6],
-                        "timestamp": record[7],
-                        "recipients": [el[0] for el in recipients]
+                        "recipient": record[2],
+                        "message": record[3],
+                        "hash": record[4],
+                        "timestamp": record[5],
+                        "recipients": [get_account(el[0]) for el in recipients]
                     }
 
-                    if record[2] != record[3]:
-                        data['type'] = 'incoming' if record[2] == bob else 'outgoing'
-                    else:
+                    if alice == bob:
                         data['type'] = 'outgoing'
-
+                    else:
+                        data['type'] = 'incoming' if record[2] == alice else 'outgoing'
+                        
                     cdms.insert(0, data)
 
 

@@ -30,4 +30,7 @@ COPY files /opt/files
 COPY config.stage.ini /opt/config.ini
 COPY server.py /opt/server.py
 
+RUN mkdir /root/.postgresql
+COPY ./.postgresql/root.crt /root/.postgresql/root.crt
+
 EXPOSE 8080

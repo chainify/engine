@@ -6,8 +6,11 @@ project
 pycharm
 
 config.ini
+config1.ini
 config.stage.ini
 config.prod.ini
+
+.postgresql
 
 *.pyc
 sql.py
