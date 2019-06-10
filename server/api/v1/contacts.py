@@ -45,9 +45,6 @@ class Contact(HTTPMethodView):
             conn = psycopg2.connect(**dsn)
             with conn:
                 with conn.cursor() as cur:
-                    print('first_name', first_name)
-                    print('last_name', last_name)
-                    
                     cur.execute("""
                         SELECT COUNT(*) FROM contacts
                         WHERE account='{account}'
@@ -57,7 +54,7 @@ class Contact(HTTPMethodView):
                         public_key=public_key
                     ))
                     count_records = cur.fetchone()[0]
-                    print('COUNT', count_records)
+
                     if count_records == 0:
                         cur.execute("""
                             INSERT INTO contacts (id, account, public_key, first_name, last_name)

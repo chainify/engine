@@ -79,7 +79,7 @@ def get_cdms(alice, bob):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT t.cnfy_id, t.id, c.recipient, c.message, c.hash, t.timestamp
+                    SELECT t.cnfy_id, t.id, c.recipient, c.message, c.hash, t.attachment_hash, t.timestamp
                     FROM cdms c
                     LEFT JOIN transactions t ON c.tx_id = t.id
                     LEFT JOIN senders s ON s.cdm_id = c.id
@@ -119,7 +119,8 @@ def get_cdms(alice, bob):
                         "recipient": record[2],
                         "message": record[3],
                         "hash": record[4],
-                        "timestamp": record[5],
+                        "attachmentHash": record[5],
+                        "timestamp": record[6],
                         "recipients": [get_account(el[0]) for el in recipients]
                     }
 

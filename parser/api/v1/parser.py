@@ -12,7 +12,7 @@ import json as pjson
 from psycopg2.extras import execute_values
 import sendgrid
 from sendgrid.helpers.mail import *
-from hashlib import blake2b
+import hashlib
 from datetime import datetime
 from time import time
 from .errors import bad_request
@@ -86,32 +86,10 @@ class Parser:
                 cnfy_id = 'cnfy-{}'.format(str(uuid.uuid4()))
                 for tx in data['transactions']:
                     if tx['type'] in [4] and tx['feeAssetId'] == config['blockchain']['asset_id']:
-                        tx_data = (
-                            tx['id'],
-                            data['height'],
-                            tx['type'],
-                            tx['sender'],
-                            tx['senderPublicKey'],
-                            tx['recipient'],
-                            tx['amount'],
-                            tx['assetId'],
-                            tx['feeAssetId'],
-                            tx['feeAsset'],
-                            tx['fee'],
-                            tx['attachment'],
-                            tx['version'],
-                            datetime.fromtimestamp(tx['timestamp'] / 1e3),
-                            cnfy_id
-                        )
-                        
-
-                        self.sql_data_transactions.append(tx_data)
-
-                        for proof in tx['proofs']:
-                            self.sql_data_proofs.append((tx['id'], proof))
                         
                         attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
+                        attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
                         
                         messages_regex = r"-----BEGIN_PUBLIC_KEY (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PUBLIC_KEY (.*)-----"
                         messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
@@ -140,6 +118,29 @@ class Parser:
 
                                 self.sql_data_senders.append((sender_id, cdm_id, sender, signature, True))
 
+                        tx_data = (
+                            tx['id'],
+                            data['height'],
+                            tx['type'],
+                            tx['sender'],
+                            tx['senderPublicKey'],
+                            tx['recipient'],
+                            tx['amount'],
+                            tx['assetId'],
+                            tx['feeAssetId'],
+                            tx['feeAsset'],
+                            tx['fee'],
+                            tx['attachment'],
+                            tx['version'],
+                            datetime.fromtimestamp(tx['timestamp'] / 1e3),
+                            cnfy_id,
+                            attachment_hash
+                        )
+                        self.sql_data_transactions.append(tx_data)
+
+                        for proof in tx['proofs']:
+                            self.sql_data_proofs.append((tx['id'], proof))
+
         except asyncio.CancelledError:
             logger.info('Parser has been stopped')
             raise
@@ -154,7 +155,7 @@ class Parser:
                 with conn.cursor() as cur:
                     if len(self.sql_data_transactions) > 0:
                         sql = """INSERT INTO transactions (id, height, type, sender, sender_public_key, recipient,
-                        amount, asset_id, fee_asset_id, fee_asset, fee, attachment, version, timestamp, cnfy_id)
+                        amount, asset_id, fee_asset_id, fee_asset, fee, attachment, version, timestamp, cnfy_id, attachment_hash)
                         VALUES %s ON CONFLICT (id) DO UPDATE SET height = EXCLUDED.height"""
                         execute_values(cur, sql, self.sql_data_transactions)
                         if cur.rowcount > 0:

@@ -85,6 +85,7 @@ def get_interlocutors(alice):
                         'created': '',
                         'lastActive': ''
                     }],
+                    'inCdms': 0,
                     'totalCdms': len(selfCdms),
                     'cdm': None if len(selfCdms) == 0 else selfCdms[-1]
                 }]
@@ -100,11 +101,17 @@ def get_interlocutors(alice):
                             'lastActive': int(time.time())
                         }
                     cdms = get_cdms(alice, bob)
+
+                    inCdms = 0
+                    for cdm in cdms:
+                        if cdm['type'] == 'incoming':
+                            inCdms += 1
                     
                     accounts.append({
                         'index': index + 1,
                         'accounts': [account],
                         'groupHash': '',
+                        'inCdms': inCdms,
                         'totalCdms': len(cdms),
                         'cdm': None if len(cdms) == 0 else cdms[-1]
                     })
