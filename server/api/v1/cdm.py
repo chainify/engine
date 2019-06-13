@@ -82,10 +82,9 @@ def get_cdms(alice, bob):
                     SELECT t.cnfy_id, t.id, c.recipient, c.message, c.hash, t.attachment_hash, t.timestamp
                     FROM cdms c
                     LEFT JOIN transactions t ON c.tx_id = t.id
-                    LEFT JOIN senders s ON s.cdm_id = c.id
-                    WHERE ((s.sender='{alice}' AND c.recipient='{bob}') 
-                    OR (s.sender='{bob}' AND c.recipient='{alice}'))
-                    AND t.valid = 1
+                    LEFT JOIN senders s ON c.tx_id = s.tx_id
+                    WHERE (s.sender='{alice}' AND c.recipient='{bob}')
+                    OR (s.sender='{bob}' AND c.recipient='{alice}')
                     ORDER BY t.timestamp DESC""".format(
                         alice=alice,
                         bob=bob

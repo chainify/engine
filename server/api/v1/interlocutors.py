@@ -50,12 +50,11 @@ def get_interlocutors(alice):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT s.sender, c.recipient, tx_id
+                    SELECT s.sender, c.recipient
                     FROM cdms c
                     LEFT JOIN transactions t ON c.tx_id = t.id
-                    LEFT JOIN senders s ON s.cdm_id = c.id
-                    WHERE (s.sender='{alice}' OR c.recipient='{alice}')
-                    AND t.valid = 1
+                    LEFT JOIN senders s ON s.tx_id = c.tx_id
+                    WHERE s.sender='{alice}' OR c.recipient='{alice}'
                     ORDER BY t.timestamp DESC""".format(
                         alice=alice
                     ))
@@ -73,7 +72,7 @@ def get_interlocutors(alice):
 
                 selfAccount = get_account(alice)
                 if selfAccount:
-                    selfAccount['name'] = 'SAVED'
+                    selfAccount['fullName'] = 'Saved Messages'
                 selfCdms = get_cdms(alice, alice)
 
                 accounts = [{
@@ -82,6 +81,7 @@ def get_interlocutors(alice):
                         'publicKey': alice,
                         'firstName': None,
                         'lastName': None,
+                        'fullName': alice,
                         'created': '',
                         'lastActive': ''
                     }],
@@ -97,6 +97,7 @@ def get_interlocutors(alice):
                             'publicKey': bob,
                             'firstName': None,
                             'lastName': None,
+                            'fullName': bob,
                             'created': int(time.time()),
                             'lastActive': int(time.time())
                         }

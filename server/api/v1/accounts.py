@@ -139,6 +139,7 @@ def get_account(public_key):
 
     first_name = None
     last_name = None
+    full_name = public_key
     created = None
     last_active = None
     if account:
@@ -148,12 +149,14 @@ def get_account(public_key):
     if contact:
         first_name = contact[0]
         last_name = contact[1]
+        full_name = ' '.join([first_name, last_name]).strip()
 
     data = {
         'publicKey': public_key,
         'created': created,
         'lastActive': last_active,
         'firstName': first_name,
+        'fullName': full_name,
         'lastName': last_name
     }
 

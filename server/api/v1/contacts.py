@@ -84,7 +84,8 @@ class Contact(HTTPMethodView):
             'account': account,
             'publicKey': public_key,
             'firstName': first_name,
-            'lastName': last_name
+            'lastName': last_name,
+            'fullName': ' '.join([first_name, last_name])
         }
 
         return json(data, status=201)
@@ -120,7 +121,8 @@ def get_contacts(public_key):
         'publicKey': contact[1],
         'firstName': contact[2],
         'lastName': contact[3],
-        'created': contact[4]
+        'created': contact[4],
+        'fullName': ' '.join([contact[2], contact[3]])        
     } for contact in contacts]
 
     return data

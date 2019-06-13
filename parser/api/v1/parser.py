@@ -90,7 +90,6 @@ class Parser:
                         attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
-                        
                         messages_regex = r"-----BEGIN_PUBLIC_KEY (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PUBLIC_KEY (.*)-----"
                         messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
 
@@ -108,15 +107,15 @@ class Parser:
 
                             self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash))
 
-                            signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
-                            signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
+                        signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
+                        signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
 
-                            for match in signature_matches:
-                                sender_id = str(uuid.uuid4())
-                                sender = match.groups()[0].strip()
-                                signature = match.groups()[2].strip()
+                        for match in signature_matches:
+                            sender_id = str(uuid.uuid4())
+                            sender = match.groups()[0].strip()
+                            signature = match.groups()[2].strip()
 
-                                self.sql_data_senders.append((sender_id, cdm_id, sender, signature, True))
+                            self.sql_data_senders.append((sender_id, tx['id'], sender, signature, True))
 
                         tx_data = (
                             tx['id'],
@@ -160,22 +159,26 @@ class Parser:
                         execute_values(cur, sql, self.sql_data_transactions)
                         if cur.rowcount > 0:
                             self.transactions_inserted += cur.rowcount
-
+                        print('LEN tx', len(self.sql_data_transactions))
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
+                        print('LEN proofs', len(self.sql_data_proofs))
 
                         sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
+                        print('LEN cdms', len(self.sql_data_cdms))
 
-                        sql = """INSERT INTO senders (id, cdm_id, sender, signature, verified)
+                        sql = """INSERT INTO senders (id, tx_id, sender, signature, verified)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_senders)                     
+                        print('LEN senders', len(self.sql_data_cdms))
 
                     conn.commit()
                     logger.info('Saved {0} transactions'.format(self.transactions_inserted))
 
-        except psycopg2.IntegrityError:
+        except psycopg2.IntegrityError as error:
+            logger.info('Error', error)
             pass
         except asyncio.CancelledError:
             logger.info('Parser has been stopped')
