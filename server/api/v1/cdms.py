@@ -31,10 +31,10 @@ dsn = {
     "target_session_attrs": config['DB']['target_session_attrs']
 }
 
-cdm = Blueprint('cdm_v1', url_prefix='/cdm')
+cdms = Blueprint('cdms_v1', url_prefix='/cdms')
 
 
-class Cdm(HTTPMethodView):
+class Cdms(HTTPMethodView):
     @staticmethod
     def post(request):
         message = request.form['message'][0]
@@ -47,7 +47,7 @@ class Cdm(HTTPMethodView):
             'tx': tx
         }
 
-        return json(data, status=(201 if tx else 200))
+        return json(data, status=201)
 
     @staticmethod
     def get(request, alice, bob):
@@ -79,10 +79,10 @@ def get_cdms(alice, bob):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT t.cnfy_id, t.id, c.recipient, c.message, c.hash, t.attachment_hash, t.timestamp
+                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp
                     FROM cdms c
-                    LEFT JOIN transactions t ON c.tx_id = t.id
                     LEFT JOIN senders s ON c.tx_id = s.tx_id
+                    LEFT JOIN transactions t ON t.id = c.tx_id
                     WHERE (s.sender='{alice}' AND c.recipient='{bob}')
                     OR (s.sender='{bob}' AND c.recipient='{alice}')
                     ORDER BY t.timestamp DESC""".format(
@@ -93,14 +93,6 @@ def get_cdms(alice, bob):
 
                 cdms = []
                 for record in records:
-                    cur.execute("""
-                        SELECT recipient FROM cdms
-                        WHERE tx_id='{tx_id}'
-                    """.format(
-                        tx_id=record[1]
-                    ))
-                    recipients = cur.fetchall()
-
                     # cur.execute("""
                     #     SELECT c.recipient
                     #     FROM cdms c
@@ -113,14 +105,12 @@ def get_cdms(alice, bob):
                     # forward_init = forwarded.pop(0)
 
                     data = {
-                        "id": record[0],
-                        "txId": record[1],
-                        "recipient": record[2],
-                        "message": record[3],
-                        "hash": record[4],
-                        "attachmentHash": record[5],
-                        "timestamp": record[6],
-                        "recipients": [get_account(el[0]) for el in recipients]
+                        "message": record[0],
+                        "hash": record[1],
+                        "id": record[2],
+                        "txId": record[3],
+                        "attachmentHash": record[4],
+                        "timestamp": record[5]
                     }
 
                     if alice == bob:
@@ -136,5 +126,5 @@ def get_cdms(alice, bob):
     
     return cdms
 
-cdm.add_route(Cdm.as_view(), '/')
-cdm.add_route(Cdm.as_view(), '/<alice>/<bob>')
+cdms.add_route(Cdms.as_view(), '/')
+cdms.add_route(Cdms.as_view(), '/<alice>/<bob>')
