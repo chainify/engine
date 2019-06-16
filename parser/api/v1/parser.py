@@ -159,20 +159,17 @@ class Parser:
                         execute_values(cur, sql, self.sql_data_transactions)
                         if cur.rowcount > 0:
                             self.transactions_inserted += cur.rowcount
-                        print('LEN tx', len(self.sql_data_transactions))
+
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
-                        print('LEN proofs', len(self.sql_data_proofs))
 
                         sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
-                        print('LEN cdms', len(self.sql_data_cdms))
 
                         sql = """INSERT INTO senders (id, tx_id, sender, signature, verified)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_senders)                     
-                        print('LEN senders', len(self.sql_data_cdms))
 
                     conn.commit()
                     logger.info('Saved {0} transactions'.format(self.transactions_inserted))

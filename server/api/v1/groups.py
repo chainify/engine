@@ -72,6 +72,7 @@ def get_groups(alice):
                     'index': 0,
                     'members': [get_account(alice)],
                     'groupHash': selfGroupHash,
+                    'fullName': 'Saved Messages',
                     'totalCdms': len(selfCdms),
                     'lastCdm': None if len(selfCdms) == 0 else selfCdms[-1]
                 }]
@@ -83,14 +84,15 @@ def get_groups(alice):
                     recipients = tx[1]
                     members = senders + recipients
                     members.sort()
-                    if alice in members:
+                    if alice in members and members != [alice]:
                         group_hash = hashlib.sha256(''.join(members).encode('utf-8')).hexdigest()
                         if group_hash not in group_hashes:
                             cdms = get_cdms(senders[0], recipients[0])
                             group = {
                                 'index': len(groups),
-                                'members': [get_account(member) for member in members],
+                                'members': [get_account(member) for member in members if member != alice],
                                 'groupHash': group_hash,
+                                'fullName': group_hash,
                                 'totalCdms': len(cdms),
                                 'lastCdm': None if len(cdms) == 0 else cdms[-1]
                             }
