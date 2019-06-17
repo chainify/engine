@@ -72,24 +72,24 @@ def get_groups(alice):
                 nolikGroupHash = hashlib.sha256(''.join([alice, nolilPublicKey]).encode('utf-8')).hexdigest()
                 nolikCdms = get_cdms(alice, nolilPublicKey)
 
-                groups = [
-                    {
+                groups = [{
                         'index': 0,
                         'members': [get_account(alice)],
                         'groupHash': selfGroupHash,
                         'fullName': 'Saved Messages',
                         'totalCdms': len(selfCdms),
                         'lastCdm': None if len(selfCdms) == 0 else selfCdms[-1]
-                    },
-                    {
+                    }]
+
+                if alice != nolilPublicKey:
+                    groups.append({
                         'index': 1,
                         'members': [get_account(nolilPublicKey)],
                         'groupHash': nolikGroupHash,
                         'fullName': 'Nolik Team',
                         'totalCdms': len(nolikCdms),
                         'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
-                    }
-                ]
+                    })
 
 
                 group_hashes = [selfGroupHash, nolikGroupHash]
