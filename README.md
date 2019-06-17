@@ -1,6 +1,6 @@
 # CDM backend engine
 
-CDM (Chainify Decentralized messaging) protocol is designed to securely exchange information in Web 3.0 applications.
+[CDM protocol](https://chainify.org/protocol.html) is designed to securely exchange information in Web 3.0 applications.
 
 
 Check [Nolik Instant Messenger](https://nolik.im) that was build based on CDM protocol. Nolik does not store personal data and even does not store the messages. CDM protocol cryptographically guarantees that no one except Alice and Bob will have access to the content of the message.
