@@ -79,7 +79,7 @@ def get_cdms(alice, bob):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp
+                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, s.sender
                     FROM cdms c
                     LEFT JOIN senders s ON c.tx_id = s.tx_id
                     LEFT JOIN transactions t ON t.id = c.tx_id
@@ -116,7 +116,7 @@ def get_cdms(alice, bob):
                     if alice == bob:
                         data['type'] = 'outgoing'
                     else:
-                        data['type'] = 'incoming' if record[2] == alice else 'outgoing'
+                        data['type'] = 'incoming' if record[6] == bob else 'outgoing'
                         
                     cdms.insert(0, data)
 

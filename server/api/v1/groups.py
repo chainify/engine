@@ -68,17 +68,31 @@ def get_groups(alice):
                 selfGroupHash = hashlib.sha256(''.join([alice, alice]).encode('utf-8')).hexdigest()
                 selfCdms = get_cdms(alice, alice)
 
-                groups = [{
-                    'index': 0,
-                    'members': [get_account(alice)],
-                    'groupHash': selfGroupHash,
-                    'fullName': 'Saved Messages',
-                    'totalCdms': len(selfCdms),
-                    'lastCdm': None if len(selfCdms) == 0 else selfCdms[-1]
-                }]
+                nolilPublicKey = 'cEdRrkTRMkd61UdQHvs1c2pwLfuCXVTA4GaABmiEqrP'
+                nolikGroupHash = hashlib.sha256(''.join([alice, nolilPublicKey]).encode('utf-8')).hexdigest()
+                nolikCdms = get_cdms(alice, nolilPublicKey)
+
+                groups = [
+                    {
+                        'index': 0,
+                        'members': [get_account(alice)],
+                        'groupHash': selfGroupHash,
+                        'fullName': 'Saved Messages',
+                        'totalCdms': len(selfCdms),
+                        'lastCdm': None if len(selfCdms) == 0 else selfCdms[-1]
+                    },
+                    {
+                        'index': 1,
+                        'members': [get_account(nolilPublicKey)],
+                        'groupHash': nolikGroupHash,
+                        'fullName': 'Nolik Team',
+                        'totalCdms': len(nolikCdms),
+                        'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
+                    }
+                ]
 
 
-                group_hashes = [selfGroupHash]
+                group_hashes = [selfGroupHash, nolikGroupHash]
                 for tx in txs:
                     senders = tx[0]
                     recipients = tx[1]

@@ -9,7 +9,7 @@ config.read('config.ini')
 
 app = Sanic('engine')
 app.blueprint(api_v1)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors = CORS(app, resources={r"/api/*": {"origins": config['app']['origins']}})
 
 if __name__ == "__main__":
     app.run(
