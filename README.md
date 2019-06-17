@@ -254,7 +254,7 @@ priv_key = ACCOUNT_PRIVATE_KEY
 api_key = EMAIL_PROVIDER_API_KEY
 ```
 
-### Run the docker comtainers
+### Run the docker containers
 ```
 docker-compose up -d
 ```
