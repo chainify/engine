@@ -27,7 +27,7 @@ RUN pip3.7 install -r requirements.txt
 
 COPY api /opt/api
 COPY files /opt/files
-COPY config.stage.ini /opt/config.ini
+COPY config.prod.ini /opt/config.ini
 COPY server.py /opt/server.py
 
 RUN mkdir /root/.postgresql

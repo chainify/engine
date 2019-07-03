@@ -57,7 +57,7 @@ class Cdms(HTTPMethodView):
         return json(data, status=200)
 
 def send_cdm(message, recipient):
-    pw.setNode(node=config['blockchain']['host'], chain='testnet')
+    pw.setNode(node=config['blockchain']['host'], chain=config['blockchain']['network'])
     sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
     
     asset = pw.Asset(config['blockchain']['asset_id'])
@@ -79,12 +79,11 @@ def get_cdms(alice, bob):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, s.sender
+                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, t.sender_public_key
                     FROM cdms c
-                    LEFT JOIN senders s ON c.tx_id = s.tx_id
                     LEFT JOIN transactions t ON t.id = c.tx_id
-                    WHERE (s.sender='{alice}' AND c.recipient='{bob}')
-                    OR (s.sender='{bob}' AND c.recipient='{alice}')
+                    WHERE (t.sender_public_key='{alice}' AND c.recipient='{bob}')
+                    OR (t.sender_public_key='{bob}' AND c.recipient='{alice}')
                     ORDER BY t.timestamp DESC""".format(
                         alice=alice,
                         bob=bob

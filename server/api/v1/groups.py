@@ -50,11 +50,7 @@ def get_groups(alice):
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
-                        array(
-                            SELECT s.sender
-                            FROM senders s
-                            WHERE s.tx_id = t.id
-                        ),
+                        t.sender_public_key,
                         array(
                             SELECT c.recipient
                             FROM cdms c
@@ -94,7 +90,8 @@ def get_groups(alice):
 
                 group_hashes = [selfGroupHash, nolikGroupHash]
                 for tx in txs:
-                    senders = tx[0]
+                    # senders = tx[0]
+                    senders = [tx[0]]
                     recipients = tx[1]
                     members = senders + recipients
                     members.sort()

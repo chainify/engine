@@ -167,9 +167,10 @@ class Parser:
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
 
-                        sql = """INSERT INTO senders (id, tx_id, sender, signature, verified)
-                        VALUES %s ON CONFLICT DO NOTHING"""
-                        execute_values(cur, sql, self.sql_data_senders)                     
+                        if len(self.sql_data_senders) > 0:
+                            sql = """INSERT INTO senders (id, tx_id, sender, signature, verified)
+                            VALUES %s ON CONFLICT DO NOTHING"""
+                            execute_values(cur, sql, self.sql_data_senders)                     
 
                     conn.commit()
                     logger.info('Saved {0} transactions'.format(self.transactions_inserted))
@@ -217,6 +218,18 @@ class Parser:
                 req = requests.get('{0}/node/status'.format(config['blockchain']['host']))
                 data = req.json()
                 self.last_block = int(data['blockchainHeight'])
+
+                with conn:
+                    with conn.cursor() as cur:
+                        if self.height > self.last_block:
+                            cur.execute("""
+                                DELETE FROM transactions WHERE height > '{height}'
+                            """.format(
+                                height=self.last_block
+                            ))
+                            self.height = self.last_block
+                            conn.commit()
+
             except Exception as error:
                 await self.emergency_stop_loop('Waves node is not responding', error)
 
