@@ -67,7 +67,7 @@ class Parser:
         # logger.info('Email sent. Status code {0}'.format(response.status_code))
 
         logger.info('Emergency loop stop request')
-        logger.error(error)
+        logger.info('Reason: {}'.format(error))
         logger.info('Closing tasks')
         for task in asyncio.Task.all_tasks():
             task.cancel()
@@ -143,7 +143,7 @@ class Parser:
             logger.info('Parser has been stopped')
             raise
         except Exception as error:
-            logger.error(error)
+            logger.error('Fetching data error: {}'.format(error))
             await self.emergency_stop_loop('Fetch data', error)
 
     async def save_data(self):
