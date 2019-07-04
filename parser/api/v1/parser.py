@@ -26,7 +26,6 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 parser = Blueprint('parser_v1', url_prefix='/parser')
-# email = sendgrid.SendGridAPIClient(apikey=config['email']['api_key'])
 dsn = {
     "user": config['DB']['user'],
     "password": config['DB']['password'],

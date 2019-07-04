@@ -39,8 +39,9 @@ class Cdms(HTTPMethodView):
     def post(request):
         message = request.form['message'][0]
         recipient = request.form['recipient'][0]
-        tx = send_cdm(message, recipient)
-
+        # tx = send_cdm(message, recipient)
+        tx = None
+        
         data = {
             'message': message,
             'recipient': recipient,
@@ -56,22 +57,22 @@ class Cdms(HTTPMethodView):
         }
         return json(data, status=200)
 
-def send_cdm(message, recipient):
-    pw.setNode(node=config['blockchain']['host'], chain=config['blockchain']['network'])
-    sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
+# def send_cdm(message, recipient):
+#     pw.setNode(node=config['blockchain']['host'], chain=config['blockchain']['network'])
+#     sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
     
-    asset = pw.Asset(config['blockchain']['asset_id'])
-    feeAsset = pw.Asset(config['blockchain']['asset_id'])
-    attachment = create_ipfs_file(message)
+#     asset = pw.Asset(config['blockchain']['asset_id'])
+#     feeAsset = pw.Asset(config['blockchain']['asset_id'])
+#     attachment = create_ipfs_file(message)
 
-    tx = sponsor.sendAsset(
-        recipient = pw.Address(publicKey=recipient),
-        asset = asset,
-        feeAsset = feeAsset,
-        amount = 1,
-        attachment = attachment['Hash'])
+#     tx = sponsor.sendAsset(
+#         recipient = pw.Address(publicKey=recipient),
+#         asset = asset,
+#         feeAsset = feeAsset,
+#         amount = 1,
+#         attachment = attachment['Hash'])
 
-    return tx
+#     return tx
 
 def get_cdms(alice, bob):
     conn = psycopg2.connect(**dsn)
