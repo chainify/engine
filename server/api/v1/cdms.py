@@ -38,13 +38,10 @@ class Cdms(HTTPMethodView):
     @staticmethod
     def post(request):
         message = request.form['message'][0]
-        recipient = request.form['recipient'][0]
-        # tx = send_cdm(message, recipient)
-        tx = None
+        tx = send_cdm(message)
         
         data = {
             'message': message,
-            'recipient': recipient,
             'tx': tx
         }
 
@@ -57,66 +54,77 @@ class Cdms(HTTPMethodView):
         }
         return json(data, status=200)
 
-# def send_cdm(message, recipient):
-#     pw.setNode(node=config['blockchain']['host'], chain=config['blockchain']['network'])
-#     sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
+def send_cdm(message):
+    pw.setNode(node=config['blockchain']['host'], chain=config['blockchain']['network'])
+    sponsor = pw.Address(seed=config['blockchain']['sponsor_seed'])
     
-#     asset = pw.Asset(config['blockchain']['asset_id'])
-#     feeAsset = pw.Asset(config['blockchain']['asset_id'])
-#     attachment = create_ipfs_file(message)
+    asset = pw.Asset(config['blockchain']['asset_id'])
+    feeAsset = pw.Asset(config['blockchain']['asset_id'])
+    attachment = create_ipfs_file(message)
 
-#     tx = sponsor.sendAsset(
-#         recipient = pw.Address(publicKey=recipient),
-#         asset = asset,
-#         feeAsset = feeAsset,
-#         amount = 1,
-#         attachment = attachment['Hash'])
+    tx = sponsor.sendAsset(
+        recipient = sponsor,
+        asset = asset,
+        feeAsset = feeAsset,
+        amount = 1,
+        attachment = attachment['Hash'])
 
-#     return tx
+    return tx
+    
 
-def get_cdms(alice, bob):
+def get_cdms(alice, group_hash):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, t.sender_public_key
+                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, t.sender_public_key, c.recipient, c.group_hash
                     FROM cdms c
                     LEFT JOIN transactions t ON t.id = c.tx_id
-                    WHERE (t.sender_public_key='{alice}' AND c.recipient='{bob}')
-                    OR (t.sender_public_key='{bob}' AND c.recipient='{alice}')
+                    WHERE c.group_hash='{group_hash}'
+                    AND c.recipient='{alice}'
                     ORDER BY t.timestamp DESC""".format(
-                        alice=alice,
-                        bob=bob
+                        group_hash=group_hash,
+                        alice=alice
                     ))
                 records = cur.fetchall()
 
                 cdms = []
                 for record in records:
-                    # cur.execute("""
-                    #     SELECT c.recipient
-                    #     FROM cdms c
-                    #     WHERE c.hash='{hash}'
-                    #     ORDER BY timestamp
-                    # """.format(
-                    #     hash=record[4]
-                    # ))
-                    # forwarded = cur.fetchall()
-                    # forward_init = forwarded.pop(0)
+                    cur.execute("""
+                        SELECT c.recipient, c.tx_id, c.timestamp
+                        FROM cdms c
+                        WHERE c.hash='{hash}' 
+                        AND c.group_hash <> '{groupHash}'
+                        ORDER BY timestamp
+                    """.format(
+                        hash=record[1],
+                        groupHash=record[7]
+                    ))
+                    forwarded = cur.fetchall()
+                    forwarded_to = []
+                    for recipient in forwarded:
+                        forwarded_to.append({
+                            'publicKey': recipient[0],
+                            'txId': recipient[1],
+                            'timestamp': recipient[2]
+                        })
 
                     data = {
                         "message": record[0],
                         "hash": record[1],
-                        "id": record[2],
-                        "txId": record[3],
+                        "txId": record[2],
+                        "id": record[3],
                         "attachmentHash": record[4],
-                        "timestamp": record[5]
+                        "timestamp": record[5],
+                        "recipient": record[6],
+                        "forwardedTo": forwarded_to
                     }
-
-                    if alice == bob:
+                    sender = record[6]
+                    if alice == sender:
                         data['type'] = 'outgoing'
                     else:
-                        data['type'] = 'incoming' if record[6] == bob else 'outgoing'
+                        data['type'] = 'incoming'
                         
                     cdms.insert(0, data)
 

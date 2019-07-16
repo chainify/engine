@@ -90,21 +90,31 @@ class Parser:
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
                         messages_regex = r"-----BEGIN_PUBLIC_KEY (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PUBLIC_KEY (.*)-----"
-                        messages_matches = re.finditer(messages_regex, attachment, re.MULTILINE)
+                        messages_matches = re.findall(messages_regex, attachment, re.MULTILINE)
+                        messages_matches =sorted(messages_matches, key=lambda tup: tup[0])
 
+                        members = []
                         for match in messages_matches:
+                            member = match[0].strip()
+                            if member not in members:
+                                members.append(member)
+
+                        group_hash = hashlib.sha256(''.join(sorted(members)).encode('utf-8')).hexdigest()
+
+                        for r_index, match in enumerate(messages_matches):
                             cdm_id = 'cdm-' + str(uuid.uuid4())
-                            recipient = match.groups()[0].strip()
-                            message = match.groups()[2].strip()
+                            recipient = match[0].strip()
+                            message = match[2].strip()
 
                             sha256_hash = None
                             sha256_regex = r"-----BEGIN_SHA256 " + re.escape(recipient) + r"-----(\n|\r\n)(.*)(\n|\r\n)-----END_SHA256 " + re.escape(recipient) + r"-----"
-                            sha256_matches = re.finditer(sha256_regex, attachment, re.MULTILINE)
+                            sha256_matches = re.findall(sha256_regex, attachment, re.MULTILINE)
 
-                            for match in sha256_matches:
-                                sha256_hash = match.groups()[1].strip()
+                            s_index = r_index % len(sha256_matches)
+                            sha256_hash = sha256_matches[s_index][1].strip()
 
-                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash))
+                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash, group_hash))
+
 
                         signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
                         signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
@@ -132,8 +142,10 @@ class Parser:
                             tx['version'],
                             datetime.fromtimestamp(tx['timestamp'] / 1e3),
                             cnfy_id,
-                            attachment_hash
+                            attachment_hash,
+                            attachment
                         )
+                        
                         self.sql_data_transactions.append(tx_data)
 
                         for proof in tx['proofs']:
@@ -153,7 +165,7 @@ class Parser:
                 with conn.cursor() as cur:
                     if len(self.sql_data_transactions) > 0:
                         sql = """INSERT INTO transactions (id, height, type, sender, sender_public_key, recipient,
-                        amount, asset_id, fee_asset_id, fee_asset, fee, attachment, version, timestamp, cnfy_id, attachment_hash)
+                        amount, asset_id, fee_asset_id, fee_asset, fee, attachment, version, timestamp, cnfy_id, attachment_hash, attachment_text)
                         VALUES %s ON CONFLICT (id) DO UPDATE SET height = EXCLUDED.height"""
                         execute_values(cur, sql, self.sql_data_transactions)
                         if cur.rowcount > 0:
@@ -162,7 +174,7 @@ class Parser:
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
 
-                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash)
+                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash, group_hash)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
 
