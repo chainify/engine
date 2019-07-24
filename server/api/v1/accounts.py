@@ -51,15 +51,31 @@ class Accounts(HTTPMethodView):
                         public_key=public_key,
                         last_active=last_active
                     ))
+
+                    cur.execute("""
+                        SELECT
+                            a.public_key,
+                            a.last_active,
+                            unnest(array(SELECT distinct c.group_hash from cdms c where c.recipient = a.public_key)) as group_hash
+                        FROM accounts a
+                        WHERE a.last_active >= now() - INTERVAL '4 seconds'
+                        AND a.public_key <> '{public_key}'
+                        ORDER BY a.last_active asc;
+                    """.format(
+                        public_key=public_key
+                    ))
+                    accounts = cur.fetchall()
+
                     conn.commit()
         except Exception as error:
             return bad_request(error)
 
-        data = {
-            'publicKey': public_key,
-            'created': last_active,
-            'lastActive': last_active
-        }
+        data = [{
+            'publicKey': account[0],
+            'lastActive': account[1],
+            'groupHash': account[2]
+        } for account in accounts]
+
 
         return json(data, status=201)
 
@@ -88,9 +104,13 @@ def get_account(public_key):
     except Exception as error:
         return bad_request(error)
 
+    now = int(time.time())
+    last_active = int(account[0].timestamp()) if account else None
+    is_online = now - last_active - 3 <= 0 if last_active else False
     data = {
         'publicKey': public_key,
-        'lastActive': account[0] if account else None
+        'lastActive': last_active,
+        'isOnline': is_online
     }
 
     return data

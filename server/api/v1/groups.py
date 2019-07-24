@@ -42,6 +42,13 @@ class Groups(HTTPMethodView):
         }
         return json(data, status=200)
 
+    # @staticmethod
+    # def get(request, alice, last_cdm_hash):
+    #     data = {
+    #         'last': []
+    #     }
+    #     return json(data, status=200)
+
 
 def get_groups(alice):
     conn = psycopg2.connect(**dsn)
@@ -49,36 +56,26 @@ def get_groups(alice):
         with conn:
             with conn.cursor() as cur:
                 
-                # cur.execute("""
-                #     SELECT
-                #         t.sender_public_key,
-                #         array(
-                #             SELECT DISTINCT c.recipient
-                #             FROM cdms c
-                #             WHERE c.tx_id = t.id
-                #             AND (t.sender_public_key = '{alice}' OR c.recipient = '{alice}')
-                #         )
-                #     FROM transactions t
-                #     ORDER BY t.timestamp DESC""".format(
-                #         alice=alice
-                #     ))
-
-                cur.execute("""
-                SELECT * FROM (
-                    SELECT distinct ON (c.group_hash) c.group_hash,
+                cur.execute("""     
+                    SELECT DISTINCT
+                        c.group_hash,
                         array(
                             SELECT DISTINCT cc.recipient
                             FROM cdms cc
                             WHERE cc.group_hash = c.group_hash
-                        ),
-                        t.sender_public_key,
-                        t.timestamp
+                        ) as cdms,
+                        c.timestamp
                     FROM cdms c
-                    LEFT JOIN transactions t ON t.id = c.tx_id
-                ) foo ORDER BY timestamp DESC""".format(
-                    alice=alice
-                ))
-                
+                    WHERE c.recipient = '{alice}'
+                    AND c.timestamp IN (
+                        SELECT max(cc.timestamp)
+                        FROM cdms cc
+                        WHERE cc.group_hash = c.group_hash
+                    )
+                    ORDER BY c.timestamp DESC;""".format(
+                        alice=alice
+                    ))
+
                 records = cur.fetchall()
                 selfGroupHash = hashlib.sha256(''.join([alice]).encode('utf-8')).hexdigest()
                 selfCdms = get_cdms(alice, selfGroupHash)
@@ -106,27 +103,26 @@ def get_groups(alice):
                         'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
                     })
 
+                # if last_cdm_attachment_hash:
+                #     latest_group_last_cdm = get_cdms(alice, records[0][0], only_last = True)
+                #     is_same = last_cdm_attachment_hash == latest_group_last_cdm['latest_group_last_cdm']
+
                 group_hashes = [selfGroupHash, nolikGroupHash]
                 for record in records:
                     group_hash = record[0]
                     if (group_hash in group_hashes):
                         continue
-                    members = list(set(record[1]))
-                    members.sort()
-                    if alice not in members:
-                        continue
-
-                    if len(members) > 0:
-                        cdms = get_cdms(alice, group_hash)
-                        group = {
-                            'index': len(groups),
-                            'members': [get_account(member) for member in members],
-                            'groupHash': group_hash,
-                            'fullName': group_hash,
-                            'totalCdms': len(cdms),
-                            'lastCdm': None if len(cdms) == 0 else cdms[-1]
-                        }
-                        groups.append(group)
+                    members = record[1]
+                    cdms = get_cdms(alice, group_hash)
+                    group = {
+                        'index': len(groups),
+                        'members': [get_account(member) for member in members],
+                        'groupHash': group_hash,
+                        'fullName': group_hash,
+                        'totalCdms': len(cdms),
+                        'lastCdm': None if len(cdms) == 0 else cdms[-1]
+                    }
+                    groups.append(group)
 
                 
 
@@ -137,3 +133,4 @@ def get_groups(alice):
 
 
 groups.add_route(Groups.as_view(), '/<alice>')
+# groups.add_route(Groups.as_view(), '/<alice>/<lasl_cdm_hash>')

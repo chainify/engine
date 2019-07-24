@@ -21,6 +21,7 @@ import uuid
 import signal
 import subprocess
 import base58
+from .utils import verify_signature
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -83,48 +84,69 @@ class Parser:
                 data = await response.text()
                 data = pjson.loads(data)
                 cnfy_id = 'cnfy-{}'.format(str(uuid.uuid4()))
+
                 for tx in data['transactions']:
                     if tx['type'] in [4] and tx['feeAssetId'] == config['blockchain']['asset_id']:
                         
                         attachment_base58 = base58.b58decode(tx['attachment']).decode('utf-8')
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
-                        messages_regex = r"-----BEGIN_PUBLIC_KEY (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_PUBLIC_KEY (.*)-----"
-                        messages_matches = re.findall(messages_regex, attachment, re.MULTILINE)
-                        messages_matches =sorted(messages_matches, key=lambda tup: tup[0])
 
-                        members = []
-                        for match in messages_matches:
-                            member = match[0].strip()
-                            if member not in members:
-                                members.append(member)
+                        cdm_regex = r"-----BEGIN_CDM_VERSION 3-----\r\n([\s\S]*)\r\n-----END_CDM_VERSION 3-----"
+                        cdm_matches = re.findall(cdm_regex, attachment, re.MULTILINE)
 
-                        group_hash = hashlib.sha256(''.join(sorted(members)).encode('utf-8')).hexdigest()
+                        if len(cdm_matches) == 0: return
 
-                        for r_index, match in enumerate(messages_matches):
+                        waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n([\s\S]*)\r\n-----END_BLOCKCHAIN WAVES-----"
+                        waves_matches = re.findall(waves_regex, cdm_matches[0], re.MULTILINE)
+                        
+                        if len(waves_matches) == 0: return
+
+                        recipients_regex = r"-----BEGIN_RECIPIENT (.*)-----"
+                        recipients = re.findall(recipients_regex, waves_matches[0], re.MULTILINE)
+                        
+                        if len(recipients_regex) == 0: return
+
+                        group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
+
+                        for recipient in recipients:
+                            recipient_regex = r"-----BEGIN_RECIPIENT {0}-----\r\n([\s\S]*)\r\n-----END_RECIPIENT {0}-----".format(recipient)
+                            recipient_matches = re.findall(recipient_regex, waves_matches[0], re.MULTILINE)
+
+                            if len(recipient_matches) == 0: return
+
+                            message_regex = r"-----BEGIN_MESSAGE-----\r\n([\s\S]*)\r\n-----END_MESSAGE-----"
+                            message_matches = re.findall(message_regex, recipient_matches[0], re.MULTILINE)
+
+                            if len(message_matches) == 0: return
+
+                            message = message_matches[0]
+                            
+                            sha256_regex = r"-----BEGIN_SHA256-----\r\n([\s\S]*)\r\n-----END_SHA256-----"
+                            sha256_matches = re.findall(sha256_regex, recipient_matches[0], re.MULTILINE)                            
+
+                            if len(sha256_matches) == 0: return
+
+                            sha256_hash = sha256_matches[0]
+
                             cdm_id = 'cdm-' + str(uuid.uuid4())
-                            recipient = match[0].strip()
-                            message = match[2].strip()
-
-                            sha256_hash = None
-                            sha256_regex = r"-----BEGIN_SHA256 " + re.escape(recipient) + r"-----(\n|\r\n)(.*)(\n|\r\n)-----END_SHA256 " + re.escape(recipient) + r"-----"
-                            sha256_matches = re.findall(sha256_regex, attachment, re.MULTILINE)
-
-                            s_index = r_index % len(sha256_matches)
-                            sha256_hash = sha256_matches[s_index][1].strip()
-
                             self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash, group_hash))
 
+                            signatures_regex = r"-----BEGIN_SIGNATURE (.*)-----"
+                            senders = re.findall(signatures_regex, recipient_matches[0], re.MULTILINE)
 
-                        signature_regex = r"-----BEGIN_SIGNATURE (.*)-----(\n|\r\n)(.*)(\n|\r\n)-----END_SIGNATURE (.*)-----"
-                        signature_matches = re.finditer(signature_regex, attachment, re.MULTILINE)
+                            for sender in senders:
+                                sender_regex = r"-----BEGIN_SIGNATURE {0}-----\r\n([\s\S]*)\r\n-----END_SIGNATURE {0}-----".format(sender)
+                                sender_matches = re.findall(sender_regex, recipient_matches[0], re.MULTILINE)
 
-                        for match in signature_matches:
-                            sender_id = str(uuid.uuid4())
-                            sender = match.groups()[0].strip()
-                            signature = match.groups()[2].strip()
+                                if len(sender_matches) == 0: return
+                                
+                                signature = sender_matches[0]
+                                sender_id = str(uuid.uuid4())
 
-                            self.sql_data_senders.append((sender_id, tx['id'], sender, signature, True))
+                                is_valid_signature = verify_signature(sender, signature, sha256_hash)
+                                self.sql_data_senders.append((sender_id, cdm_id, sender, signature, True))
+    
 
                         tx_data = (
                             tx['id'],
@@ -156,7 +178,8 @@ class Parser:
             raise
         except Exception as error:
             logger.error('Fetching data error: {}'.format(error))
-            await self.emergency_stop_loop('Fetch data', error)
+            pass
+            # await self.emergency_stop_loop('Fetch data', error)
 
     async def save_data(self):
         conn = psycopg2.connect(**dsn)
@@ -179,7 +202,7 @@ class Parser:
                         execute_values(cur, sql, self.sql_data_cdms)        
 
                         if len(self.sql_data_senders) > 0:
-                            sql = """INSERT INTO senders (id, tx_id, sender, signature, verified)
+                            sql = """INSERT INTO senders (id, cdm_id, sender, signature, verified)
                             VALUES %s ON CONFLICT DO NOTHING"""
                             execute_values(cur, sql, self.sql_data_senders)                     
 

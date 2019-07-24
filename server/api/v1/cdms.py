@@ -48,9 +48,9 @@ class Cdms(HTTPMethodView):
         return json(data, status=201)
 
     @staticmethod
-    def get(request, alice, bob):
+    def get(request, alice, group_hash):
         data = {
-            'cdms': get_cdms(alice, bob)
+            'cdms': get_cdms(alice, group_hash)
         }
         return json(data, status=200)
 
@@ -70,7 +70,7 @@ def send_cdm(message):
         attachment = attachment['Hash'])
 
     return tx
-    
+
 
 def get_cdms(alice, group_hash):
     conn = psycopg2.connect(**dsn)
@@ -78,12 +78,31 @@ def get_cdms(alice, group_hash):
         with conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT c.message, c.hash, t.id, t.cnfy_id, t.attachment_hash, t.timestamp, t.sender_public_key, c.recipient, c.group_hash
+                    SELECT
+                        c.message,
+                        c.hash,
+                        t.id,
+                        c.id,
+                        t.attachment_hash,
+                        t.timestamp,
+                        t.sender_public_key,
+                        c.recipient,
+                        c.group_hash,
+                        s.sender,
+                        c.timestamp,
+                        (
+                            SELECT min(tt.timestamp)
+                            FROM cdms cc
+                            LEFT JOIN transactions tt on cc.tx_id = tt.id
+                            WHERE cc.hash = c.hash
+                        ) as min_ts
                     FROM cdms c
-                    LEFT JOIN transactions t ON t.id = c.tx_id
+                    LEFT JOIN transactions t on c.tx_id = t.id
+                    LEFT JOIN senders s ON s.cdm_id = c.id
                     WHERE c.group_hash='{group_hash}'
                     AND c.recipient='{alice}'
-                    ORDER BY t.timestamp DESC""".format(
+                    ORDER BY min_ts ASC
+                    """.format(
                         group_hash=group_hash,
                         alice=alice
                     ))
@@ -94,17 +113,16 @@ def get_cdms(alice, group_hash):
                     cur.execute("""
                         SELECT c.recipient, c.tx_id, c.timestamp
                         FROM cdms c
-                        WHERE c.hash='{hash}' 
-                        AND c.group_hash <> '{groupHash}'
+                        WHERE c.hash='{hash}'
                         ORDER BY timestamp
                     """.format(
                         hash=record[1],
                         groupHash=record[7]
                     ))
-                    forwarded = cur.fetchall()
-                    forwarded_to = []
-                    for recipient in forwarded:
-                        forwarded_to.append({
+                    recipients = cur.fetchall()
+                    shared_with = []
+                    for recipient in recipients:
+                        shared_with.append({
                             'publicKey': recipient[0],
                             'txId': recipient[1],
                             'timestamp': recipient[2]
@@ -117,16 +135,18 @@ def get_cdms(alice, group_hash):
                         "id": record[3],
                         "attachmentHash": record[4],
                         "timestamp": record[5],
-                        "recipient": record[6],
-                        "forwardedTo": forwarded_to
+                        "realSender": record[6],
+                        "logicalSender": record[9] or record[6],
+                        "recipient": record[7],
+                        "sharedWith": shared_with
                     }
-                    sender = record[6]
+                    sender = record[9] or record[6]
                     if alice == sender:
                         data['type'] = 'outgoing'
                     else:
                         data['type'] = 'incoming'
                         
-                    cdms.insert(0, data)
+                    cdms.append(data)
 
 
     except Exception as error:
@@ -135,4 +155,4 @@ def get_cdms(alice, group_hash):
     return cdms
 
 cdms.add_route(Cdms.as_view(), '/')
-cdms.add_route(Cdms.as_view(), '/<alice>/<bob>')
+cdms.add_route(Cdms.as_view(), '/<alice>/<group_hash>')
