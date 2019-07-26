@@ -92,38 +92,48 @@ class Parser:
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
 
-                        cdm_regex = r"-----BEGIN_CDM_VERSION 3-----\r\n([\s\S]*)\r\n-----END_CDM_VERSION 3-----"
-                        cdm_matches = re.findall(cdm_regex, attachment, re.MULTILINE)
+                        # cdm_regex = r"-----BEGIN_CDM_VERSION 4-----\r\n([\s\S]*)\r\n-----END_CDM_VERSION 4-----"
+                        cdm_regex = r"-----BEGIN_CDM_VERSION 4-----\r\n(?:(?!-----END_CDM_VERSION 4-----).)*?\r\n-----END_CDM_VERSION 4-----"
+                        cdm_matches = re.findall(cdm_regex, attachment, re.MULTILINE | re.DOTALL)
 
                         if len(cdm_matches) == 0: return
 
-                        waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n([\s\S]*)\r\n-----END_BLOCKCHAIN WAVES-----"
-                        waves_matches = re.findall(waves_regex, cdm_matches[0], re.MULTILINE)
+                        # waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n([\s\S]*)\r\n-----END_BLOCKCHAIN WAVES-----"
+                        waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n(?:(?!-----END_BLOCKCHAIN WAVES-----).)*?\r\n-----END_BLOCKCHAIN WAVES-----"
+                        waves_matches = re.findall(waves_regex, cdm_matches[0], re.MULTILINE | re.DOTALL)
                         
                         if len(waves_matches) == 0: return
 
-                        recipients_regex = r"-----BEGIN_RECIPIENT (.*)-----"
-                        recipients = re.findall(recipients_regex, waves_matches[0], re.MULTILINE)
+                        print('waves_matches', waves_matches)
+
+                        # recipients_regex = r"-----BEGIN_RECIPIENT (.*)-----"
+                        blocks_regex = r"-----BEGIN_RECIPIENT(?:(?!(-----END_RECIPIENT)).)*?-----END_RECIPIENT"
+                        blocks = re.findall(blocks_regex, waves_matches[0], re.MULTILINE | re.DOTALL)
+
                         
-                        if len(recipients_regex) == 0: return
+                        # group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
 
-                        group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
+                        for block in blocks:
+                            print('block', block)
+                            recipient_regex = r"-----BEGIN_RECIPIENT (.*)-----\r\n"
+                            recipient_matches = re.findall(recipient_regex, block, re.MULTILINE | re.DOTALL)
 
-                        for recipient in recipients:
-                            recipient_regex = r"-----BEGIN_RECIPIENT {0}-----\r\n([\s\S]*)\r\n-----END_RECIPIENT {0}-----".format(recipient)
-                            recipient_matches = re.findall(recipient_regex, waves_matches[0], re.MULTILINE)
-
+                            print('recipient_matches', recipient_matches)
                             if len(recipient_matches) == 0: return
 
+
+                            return
                             message_regex = r"-----BEGIN_MESSAGE-----\r\n([\s\S]*)\r\n-----END_MESSAGE-----"
-                            message_matches = re.findall(message_regex, recipient_matches[0], re.MULTILINE)
+                            message_matches = re.findall(message_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
 
                             if len(message_matches) == 0: return
 
                             message = message_matches[0]
                             
                             sha256_regex = r"-----BEGIN_SHA256-----\r\n([\s\S]*)\r\n-----END_SHA256-----"
-                            sha256_matches = re.findall(sha256_regex, recipient_matches[0], re.MULTILINE)                            
+                            sha256_matches = re.findall(sha256_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)   
+
+                            # print('sha256_matches', sha2/z56_matches)                         
 
                             if len(sha256_matches) == 0: return
 
@@ -133,11 +143,11 @@ class Parser:
                             self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash, group_hash))
 
                             signatures_regex = r"-----BEGIN_SIGNATURE (.*)-----"
-                            senders = re.findall(signatures_regex, recipient_matches[0], re.MULTILINE)
+                            senders = re.findall(signatures_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
 
                             for sender in senders:
                                 sender_regex = r"-----BEGIN_SIGNATURE {0}-----\r\n([\s\S]*)\r\n-----END_SIGNATURE {0}-----".format(sender)
-                                sender_matches = re.findall(sender_regex, recipient_matches[0], re.MULTILINE)
+                                sender_matches = re.findall(sender_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
 
                                 if len(sender_matches) == 0: return
                                 

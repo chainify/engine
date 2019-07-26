@@ -12,7 +12,6 @@ import aiohttp
 import requests
 import psycopg2
 import hashlib
-from .accounts import get_account
 from .cdms import get_cdms
 from .errors import bad_request
 import configparser
@@ -41,13 +40,6 @@ class Groups(HTTPMethodView):
             'groups': get_groups(alice)
         }
         return json(data, status=200)
-
-    # @staticmethod
-    # def get(request, alice, last_cdm_hash):
-    #     data = {
-    #         'last': []
-    #     }
-    #     return json(data, status=200)
 
 
 def get_groups(alice):
@@ -86,7 +78,7 @@ def get_groups(alice):
 
                 groups = [{
                         'index': 0,
-                        'members': [get_account(alice)],
+                        'members': [alice],
                         'groupHash': selfGroupHash,
                         'fullName': 'Saved Messages',
                         'totalCdms': len(selfCdms),
@@ -96,16 +88,12 @@ def get_groups(alice):
                 if alice != nolilPublicKey:
                     groups.append({
                         'index': 1,
-                        'members': [get_account(alice), get_account(nolilPublicKey)],
+                        'members': [alice, nolilPublicKey],
                         'groupHash': nolikGroupHash,
                         'fullName': 'Nolik Team',
                         'totalCdms': len(nolikCdms),
                         'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
                     })
-
-                # if last_cdm_attachment_hash:
-                #     latest_group_last_cdm = get_cdms(alice, records[0][0], only_last = True)
-                #     is_same = last_cdm_attachment_hash == latest_group_last_cdm['latest_group_last_cdm']
 
                 group_hashes = [selfGroupHash, nolikGroupHash]
                 for record in records:
@@ -116,7 +104,7 @@ def get_groups(alice):
                     cdms = get_cdms(alice, group_hash)
                     group = {
                         'index': len(groups),
-                        'members': [get_account(member) for member in members],
+                        'members': members,
                         'groupHash': group_hash,
                         'fullName': group_hash,
                         'totalCdms': len(cdms),

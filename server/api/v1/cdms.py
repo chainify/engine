@@ -16,7 +16,6 @@ import contextvars
 import collections
 import pywaves as pw
 import datetime
-from .accounts import get_account
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -70,6 +69,30 @@ def send_cdm(message):
         attachment = attachment['Hash'])
 
     return tx
+
+
+def get_last_cdm(alice):
+    conn = psycopg2.connect(**dsn)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT t.attachment_hash
+                    FROM cdms c
+                    LEFT JOIN transactions t ON t.id = c.tx_id
+                    WHERE c.recipient='{alice}'
+                    ORDER BY t.timestamp DESC
+                    LIMIT 1
+                """.format(
+                    alice=alice
+                ))
+                cdm = cur.fetchone()
+
+
+    except Exception as error:
+        return bad_request(error)
+    
+    return cdm
 
 
 def get_cdms(alice, group_hash):
