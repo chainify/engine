@@ -22,6 +22,7 @@ import signal
 import subprocess
 import base58
 from .utils import verify_signature
+import xml.etree.ElementTree as ET
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -92,71 +93,40 @@ class Parser:
                         attachment = requests.get('{0}:{1}/ipfs/{2}'.format(config['ipfs']['host'], config['ipfs']['get_port'], attachment_base58)).text
                         attachment_hash = hashlib.sha256(attachment.encode('utf-8')).hexdigest()
 
-                        # cdm_regex = r"-----BEGIN_CDM_VERSION 4-----\r\n([\s\S]*)\r\n-----END_CDM_VERSION 4-----"
-                        cdm_regex = r"-----BEGIN_CDM_VERSION 4-----\r\n(?:(?!-----END_CDM_VERSION 4-----).)*?\r\n-----END_CDM_VERSION 4-----"
-                        cdm_matches = re.findall(cdm_regex, attachment, re.MULTILINE | re.DOTALL)
-
-                        if len(cdm_matches) == 0: return
-
-                        # waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n([\s\S]*)\r\n-----END_BLOCKCHAIN WAVES-----"
-                        waves_regex = r"-----BEGIN_BLOCKCHAIN WAVES-----\r\n(?:(?!-----END_BLOCKCHAIN WAVES-----).)*?\r\n-----END_BLOCKCHAIN WAVES-----"
-                        waves_matches = re.findall(waves_regex, cdm_matches[0], re.MULTILINE | re.DOTALL)
+                        root = ET.fromstring(attachment)
+                        version = root.findall('version')[0].text if len(root.findall('version')) > 0 else None
+                        blockchain = root.findall('blockchain')[0].text if len(root.findall('blockchain')) > 0 else None
+                        network = root.findall('network')[0].text if len(root.findall('network')) > 0 else None
+                        messages = root.findall('messages')[0] if len(root.findall('messages')) > 0 else []
                         
-                        if len(waves_matches) == 0: return
+                        recipients = []
+                        for message in messages:
+                            recipient = message.findall('recipient')[0] if len(message.findall('recipient')) > 0 else None
+                            recipient_public_key = recipient.findall('publickey')[0].text if len(recipient.findall('publickey')) > 0 else None
+                            ciphertext = message.findall('ciphertext')[0].text if len(message.findall('ciphertext')) > 0 else None
+                            message_hash = message.findall('sha256')[0].text if len(message.findall('sha256')) > 0 else None
 
-                        print('waves_matches', waves_matches)
-
-                        # recipients_regex = r"-----BEGIN_RECIPIENT (.*)-----"
-                        blocks_regex = r"-----BEGIN_RECIPIENT(?:(?!(-----END_RECIPIENT)).)*?-----END_RECIPIENT"
-                        blocks = re.findall(blocks_regex, waves_matches[0], re.MULTILINE | re.DOTALL)
-
-                        
-                        # group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
-
-                        for block in blocks:
-                            print('block', block)
-                            recipient_regex = r"-----BEGIN_RECIPIENT (.*)-----\r\n"
-                            recipient_matches = re.findall(recipient_regex, block, re.MULTILINE | re.DOTALL)
-
-                            print('recipient_matches', recipient_matches)
-                            if len(recipient_matches) == 0: return
-
-
-                            return
-                            message_regex = r"-----BEGIN_MESSAGE-----\r\n([\s\S]*)\r\n-----END_MESSAGE-----"
-                            message_matches = re.findall(message_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
-
-                            if len(message_matches) == 0: return
-
-                            message = message_matches[0]
-                            
-                            sha256_regex = r"-----BEGIN_SHA256-----\r\n([\s\S]*)\r\n-----END_SHA256-----"
-                            sha256_matches = re.findall(sha256_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)   
-
-                            # print('sha256_matches', sha2/z56_matches)                         
-
-                            if len(sha256_matches) == 0: return
-
-                            sha256_hash = sha256_matches[0]
+                            if recipient_public_key not in recipients:
+                                recipients.append(recipient_public_key)
 
                             cdm_id = 'cdm-' + str(uuid.uuid4())
-                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient, message, sha256_hash, group_hash))
+                            group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
 
-                            signatures_regex = r"-----BEGIN_SIGNATURE (.*)-----"
-                            senders = re.findall(signatures_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
+                            for index, cdm in enumerate(self.sql_data_cdms):
+                                cdm = list(cdm)
+                                cdm[5] = group_hash
+                                self.sql_data_cdms[index] = tuple(cdm)
 
-                            for sender in senders:
-                                sender_regex = r"-----BEGIN_SIGNATURE {0}-----\r\n([\s\S]*)\r\n-----END_SIGNATURE {0}-----".format(sender)
-                                sender_matches = re.findall(sender_regex, recipient_matches[0], re.MULTILINE | re.DOTALL)
+                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient_public_key, ciphertext, message_hash, group_hash, blockchain, network))
+                            
+                            senders = message.findall('senders')[0].text if len(message.findall('senders')) > 0 else None
+                            if senders:
+                                for sender in senders:
+                                    sender_public_key = sender.findall('publickey')[0].text if len(sender.findall('publickey')) > 0 else None
+                                    signature = sender.findall('signature')[0].text if len(sender.findall('signature')) > 0 else None
 
-                                if len(sender_matches) == 0: return
-                                
-                                signature = sender_matches[0]
-                                sender_id = str(uuid.uuid4())
-
-                                is_valid_signature = verify_signature(sender, signature, sha256_hash)
-                                self.sql_data_senders.append((sender_id, cdm_id, sender, signature, True))
-    
+                                    sender_id = str(uuid.uuid4())                                    
+                                    self.sql_data_senders.append((sender_id, cdm_id, sender_public_key, signature, True))
 
                         tx_data = (
                             tx['id'],
@@ -183,6 +153,8 @@ class Parser:
                         for proof in tx['proofs']:
                             self.sql_data_proofs.append((tx['id'], proof))
 
+                       
+
         except asyncio.CancelledError:
             logger.info('Parser has been stopped')
             raise
@@ -207,7 +179,7 @@ class Parser:
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
 
-                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash, group_hash)
+                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash, group_hash, blockchain, network)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
 

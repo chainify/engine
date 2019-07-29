@@ -38,8 +38,7 @@ heartbeat = Blueprint('heartbeat_v1', url_prefix='/heartbeat')
 class HeartBeat(HTTPMethodView):
 
     @staticmethod
-    def post(request):
-        public_key = request.form['publicKey'][0]
+    def post(request, public_key):
         last_active = datetime.now()
 
         try:
@@ -65,4 +64,4 @@ class HeartBeat(HTTPMethodView):
         return json(data, status=201)
 
 
-heartbeat.add_route(HeartBeat.as_view(), '/<alice>')
+heartbeat.add_route(HeartBeat.as_view(), '/<public_key>')
