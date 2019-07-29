@@ -77,7 +77,6 @@ def get_groups(alice):
                 nolikCdms = get_cdms(alice, nolikGroupHash)
 
                 groups = [{
-                        'index': 0,
                         'members': [alice],
                         'groupHash': selfGroupHash,
                         'fullName': 'Saved Messages',
@@ -87,7 +86,6 @@ def get_groups(alice):
 
                 if alice != nolilPublicKey:
                     groups.append({
-                        'index': 1,
                         'members': [alice, nolilPublicKey],
                         'groupHash': nolikGroupHash,
                         'fullName': 'Nolik Team',
@@ -103,7 +101,6 @@ def get_groups(alice):
                     members = record[1]
                     cdms = get_cdms(alice, group_hash)
                     group = {
-                        'index': len(groups),
                         'members': members,
                         'groupHash': group_hash,
                         'fullName': group_hash,

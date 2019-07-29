@@ -103,6 +103,13 @@ class Parser:
                         for message in messages:
                             recipient = message.findall('recipient')[0] if len(message.findall('recipient')) > 0 else None
                             recipient_public_key = recipient.findall('publickey')[0].text if len(recipient.findall('publickey')) > 0 else None
+                            if recipient_public_key not in recipients:
+                                recipients.append(recipient_public_key)
+
+                        group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
+                        for message in messages:
+                            recipient = message.findall('recipient')[0] if len(message.findall('recipient')) > 0 else None
+                            recipient_public_key = recipient.findall('publickey')[0].text if len(recipient.findall('publickey')) > 0 else None
                             ciphertext = message.findall('ciphertext')[0].text if len(message.findall('ciphertext')) > 0 else None
                             message_hash = message.findall('sha256')[0].text if len(message.findall('sha256')) > 0 else None
 
@@ -110,16 +117,9 @@ class Parser:
                                 recipients.append(recipient_public_key)
 
                             cdm_id = 'cdm-' + str(uuid.uuid4())
-                            group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
-
-                            for index, cdm in enumerate(self.sql_data_cdms):
-                                cdm = list(cdm)
-                                cdm[5] = group_hash
-                                self.sql_data_cdms[index] = tuple(cdm)
-
                             self.sql_data_cdms.append((cdm_id, tx['id'], recipient_public_key, ciphertext, message_hash, group_hash, blockchain, network))
                             
-                            senders = message.findall('senders')[0].text if len(message.findall('senders')) > 0 else None
+                            senders = message.findall('senders')[0] if len(message.findall('senders')) > 0 else None
                             if senders:
                                 for sender in senders:
                                     sender_public_key = sender.findall('publickey')[0].text if len(sender.findall('publickey')) > 0 else None
@@ -128,6 +128,7 @@ class Parser:
                                     sender_id = str(uuid.uuid4())                                    
                                     self.sql_data_senders.append((sender_id, cdm_id, sender_public_key, signature, True))
 
+                        print('self.sql_data_cdms', len(self.sql_data_cdms))
                         tx_data = (
                             tx['id'],
                             data['height'],
