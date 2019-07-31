@@ -12,3 +12,4 @@ python-socketio
 sanic-cors
 pycrypto
 plyvel
+redis

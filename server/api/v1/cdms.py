@@ -100,7 +100,7 @@ def get_cdms(alice, group_hash):
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                sql = """
                     SELECT
                         c.message,
                         c.hash,
@@ -128,7 +128,9 @@ def get_cdms(alice, group_hash):
                     """.format(
                         group_hash=group_hash,
                         alice=alice
-                    ))
+                    )
+
+                cur.execute(sql)
                 records = cur.fetchall()
 
                 cdms = []

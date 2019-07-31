@@ -17,7 +17,7 @@ from .errors import bad_request
 import configparser
 import base58
 
-accounts = Blueprint('accounts_v1', url_prefix='/accounts')
+# accounts = Blueprint('accounts_v1', url_prefix='/accounts')
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -33,15 +33,15 @@ dsn = {
 }
 
 
-class Accounts(HTTPMethodView):
-    @staticmethod
-    def get(request, public_key):
-        data = get_account(public_key)
-        return json(data, status=200 if data else 204)
+# class Accounts(HTTPMethodView):
+#     @staticmethod
+#     def get(request, public_key):
+#         data = get_account(public_key, last_timestamp)
+#         return json(data, status=200 if data else 204)
 
 
 
-def get_account(public_key):
+def get_account(public_key, last_timestamp):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
@@ -50,13 +50,19 @@ def get_account(public_key):
                     SELECT
                         a.public_key,
                         a.last_active,
-                        unnest(array(SELECT distinct c.group_hash from cdms c where c.recipient = a.public_key)) as group_hash
+                        unnest(array(
+                            SELECT distinct c.group_hash 
+                            FROM cdms c 
+                            WHERE c.recipient = a.public_key
+                            AND c.timestamp >= (SELECT to_timestamp({last_timestamp}) AT TIME ZONE 'UTC')
+                        )) as group_hash
                     FROM accounts a
                     WHERE a.last_active >= now() - INTERVAL '4 seconds'
                     AND a.public_key <> '{public_key}'
                     ORDER BY a.last_active desc;
                 """.format(
-                    public_key=public_key
+                    public_key=public_key,
+                    last_timestamp=last_timestamp
                 ))
                 accounts = cur.fetchall()
 
@@ -72,5 +78,5 @@ def get_account(public_key):
     return data
 
 
-accounts.add_route(Accounts.as_view(), '/')
-accounts.add_route(Accounts.as_view(), '/<public_key>')
+# accounts.add_route(Accounts.as_view(), '/')
+# accounts.add_route(Accounts.as_view(), '/<public_key>')

@@ -36,19 +36,19 @@ dsn = {
 class Groups(HTTPMethodView):
     @staticmethod
     def get(request, alice):
+        last_timestamp = request.args['lastTimestamp'][0] if 'lastTimestamp' in request.args else None
         data = {
-            'groups': get_groups(alice)
+            'groups': get_groups(alice, last_timestamp)
         }
         return json(data, status=200)
 
 
-def get_groups(alice):
+def get_groups(alice, last_timestamp):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
-                
-                cur.execute("""     
+                query = """     
                     SELECT DISTINCT
                         c.group_hash,
                         array(
@@ -64,36 +64,34 @@ def get_groups(alice):
                         FROM cdms cc
                         WHERE cc.group_hash = c.group_hash
                     )
-                    ORDER BY c.timestamp DESC;""".format(
-                        alice=alice
-                    ))
+                """.format(
+                    alice=alice
+                )
+                if last_timestamp:
+                    query = query + "AND c.timestamp > (SELECT to_timestamp({last_timestamp}) AT TIME ZONE 'UTC')\n".format(
+                        last_timestamp=last_timestamp
+                    )
 
+                query = query + 'ORDER BY c.timestamp DESC'
+                cur.execute(query)
                 records = cur.fetchall()
-                selfGroupHash = hashlib.sha256(''.join([alice]).encode('utf-8')).hexdigest()
-                selfCdms = get_cdms(alice, selfGroupHash)
 
                 nolilPublicKey = 'cEdRrkTRMkd61UdQHvs1c2pwLfuCXVTA4GaABmiEqrP'
                 nolikGroupHash = hashlib.sha256(''.join(sorted([alice, nolilPublicKey])).encode('utf-8')).hexdigest()
                 nolikCdms = get_cdms(alice, nolikGroupHash)
 
-                groups = [{
-                        'members': [alice],
-                        'groupHash': selfGroupHash,
-                        'fullName': 'Saved Messages',
-                        'totalCdms': len(selfCdms),
-                        'lastCdm': None if len(selfCdms) == 0 else selfCdms[-1]
-                    }]
+                
+                # if alice != nolilPublicKey:
+                #     groups.append({
+                #         'members': [alice, nolilPublicKey],
+                #         'groupHash': nolikGroupHash,
+                #         'totalCdms': len(nolikCdms),
+                #         'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
+                #     })
 
-                if alice != nolilPublicKey:
-                    groups.append({
-                        'members': [alice, nolilPublicKey],
-                        'groupHash': nolikGroupHash,
-                        'fullName': 'Nolik Team',
-                        'totalCdms': len(nolikCdms),
-                        'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
-                    })
-
-                group_hashes = [selfGroupHash, nolikGroupHash]
+                # group_hashes = [nolikGroupHash]
+                groups = []
+                group_hashes = []
                 for record in records:
                     group_hash = record[0]
                     if (group_hash in group_hashes):
@@ -103,7 +101,6 @@ def get_groups(alice):
                     group = {
                         'members': members,
                         'groupHash': group_hash,
-                        'fullName': group_hash,
                         'totalCdms': len(cdms),
                         'lastCdm': None if len(cdms) == 0 else cdms[-1]
                     }

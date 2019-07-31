@@ -210,7 +210,13 @@ class Parser:
             self.sql_data_senders = []
 
     async def start(self):
-        conn = psycopg2.connect(**dsn)
+        conn = None
+        try:
+            conn = psycopg2.connect(**dsn)
+        except psycopg2.OperationalError as error:
+            logger.error('Postgres Engine Error:', error)
+            await self.emergency_stop_loop('No conn error', 'Error on connection to Postgres Engine')
+
         try:
             with conn:
                 with conn.cursor() as cur:
@@ -226,6 +232,7 @@ class Parser:
                         if self.height < start_height:
                             self.height = start_height
 
+        
         except Exception as error:
             logger.error('Max height request error: {}'.format(error))
             await self.emergency_stop_loop('Max height request error', error)
@@ -304,32 +311,32 @@ def gentle_exit(app, loop):
     logger.info('Killing the process')
     os.kill(os.getpid(), signal.SIGKILL)
 
-@parser.route('/start', methods=['POST'])
-def controls_start(request):
-    loop = asyncio.get_running_loop()
-    loop.create_task(controls.start())
-    return json({"action": "start", "status": "OK"})
+# @parser.route('/start', methods=['POST'])
+# def controls_start(request):
+#     loop = asyncio.get_running_loop()
+#     loop.create_task(controls.start())
+#     return json({"action": "start", "status": "OK"})
 
 @parser.route('/healthcheck', methods=['GET'])
 def container_healthcheck(request):
     return json({"action": "healthcheck", "status": "OK"})
 
 
-@parser.route('/stop', methods=['POST'])
-def controls_stop(request):
-    try:
-        loop = asyncio.get_running_loop()
-        tasks = [t for t in asyncio.all_tasks() if t is not
-                 asyncio.current_task()]
+# @parser.route('/stop', methods=['POST'])
+# def controls_stop(request):
+#     try:
+#         loop = asyncio.get_running_loop()
+#         tasks = [t for t in asyncio.all_tasks() if t is not
+#                  asyncio.current_task()]
 
-        [task.cancel() for task in tasks]
+#         [task.cancel() for task in tasks]
 
-        logger.info('Canceling outstanding tasks')
-        asyncio.gather(*tasks)
-        loop.stop()
-        logger.info('Shutdown complete.')
+#         logger.info('Canceling outstanding tasks')
+#         asyncio.gather(*tasks)
+#         loop.stop()
+#         logger.info('Shutdown complete.')
 
-    except Exception as error:
-        return bad_request(error)
+#     except Exception as error:
+#         return bad_request(error)
 
-    return json({"action": "stop", "status": "OK"})
+#     return json({"action": "stop", "status": "OK"})

@@ -9,8 +9,10 @@ services:
       - 80:80
     volumes:
       - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf
+      - ~/.data/sqlite/chainify:/opt/db
     depends_on:
       - api
+      - postgres
       - parser
       - ipfs
     restart: unless-stopped
@@ -24,14 +26,39 @@ services:
       - ./server/config.ini:/opt/config.ini
       - ~/.data/leveldb/chainify/messenger:/root/.data/leveldb/messenger
       - ~/.data/leveldb/chainify/sql:/root/.data/leveldb/sql
-    networks:
-      - postgres_default
-      - default
-    external_links:
-      - postgres:postgres
     command: bash -c "python3.7 server.py"
     depends_on:
       - ipfs
+      - postgres
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+  postgres:
+    build: ./postgresql
+    image: chainify/engine-postgres
+    container_name: engine-postgres
+    volumes:
+      - ~/.data/chainify/postgres:/var/lib/postgresql/data
+      - ./postgresql/postgresql.conf:/etc/postgresql/postgresql.conf
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_DB=chainify
+      - POSTGRES_USER=chainify
+      - POSTGRES_PASSWORD=chainify
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+  redis:
+    build: ./redis
+    image: chainify/engine-redis
+    container_name: engine-redis
+    volumes:
+      - ~/.data/chainify/redis:/data
+    ports:
+      - 6379:6379
     tty: true
     stdin_open: true
     restart: unless-stopped
@@ -43,12 +70,8 @@ services:
     volumes:
       - ./parser:/opt
     depends_on:
+      - postgres
       - ipfs
-    networks:
-      - postgres_default
-      - default
-    external_links:
-      - postgres:postgres
     command: bash -c "python3.7 server.py"
     tty: true
     stdin_open: true
@@ -61,7 +84,11 @@ services:
     image: chainify/engine-ipfs
     container_name: engine-ipfs
     volumes:
-      - ~/.data/ipfs/chainify:/data/ipfs
+      - ~/.data/ipfs/nolik/data:/data/ipfs
+      - ~/.data/ipfs/nolik/staging:/export
+    ports:
+      - 4001:4001
+      - 5001:5001
     restart: unless-stopped
     tty: true
     stdin_open: true
@@ -75,9 +102,3 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - AUTOHEAL_CONTAINER_LABEL=autoheal
-
-networks:
-  default:
-    driver: bridge
-  postgres_default:
-    external: true
