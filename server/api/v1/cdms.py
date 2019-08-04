@@ -16,6 +16,7 @@ import contextvars
 import collections
 import pywaves as pw
 import datetime
+import base58
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -71,31 +72,7 @@ def send_cdm(message):
     return tx
 
 
-def get_last_cdm(alice):
-    conn = psycopg2.connect(**dsn)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT t.attachment_hash
-                    FROM cdms c
-                    LEFT JOIN transactions t ON t.id = c.tx_id
-                    WHERE c.recipient='{alice}'
-                    ORDER BY t.timestamp DESC
-                    LIMIT 1
-                """.format(
-                    alice=alice
-                ))
-                cdm = cur.fetchone()
-
-
-    except Exception as error:
-        return bad_request(error)
-    
-    return cdm
-
-
-def get_cdms(alice, group_hash):
+def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
@@ -103,7 +80,7 @@ def get_cdms(alice, group_hash):
                 sql = """
                     SELECT
                         c.message,
-                        c.hash,
+                        c.message_hash,
                         t.id,
                         c.id,
                         t.attachment_hash,
@@ -117,19 +94,36 @@ def get_cdms(alice, group_hash):
                             SELECT min(tt.timestamp)
                             FROM cdms cc
                             LEFT JOIN transactions tt on cc.tx_id = tt.id
-                            WHERE cc.hash = c.hash
-                        ) as min_ts
+                            WHERE cc.message_hash = c.message_hash
+                        ) as min_ts,
+                        c.subject,
+                        c.subject_hash,
+                        c.type,
+                        t.attachment,
+                        s.signature,
+                        array(
+                            SELECT p.proof
+                            FROM proofs p
+                            WHERE p.tx_id = t.id
+                        ) as proofs
                     FROM cdms c
                     LEFT JOIN transactions t on c.tx_id = t.id
                     LEFT JOIN senders s ON s.cdm_id = c.id
-                    WHERE c.group_hash='{group_hash}'
-                    AND c.recipient='{alice}'
-                    ORDER BY min_ts ASC
-                    """.format(
-                        group_hash=group_hash,
-                        alice=alice
-                    )
+                    WHERE (c.recipient='{alice}' OR t.sender_public_key='{alice}')
+                    """.format(alice=alice)
 
+                if group_hash not in ['None', None]:
+                    sql += "\nAND c.group_hash='{0}'".format(group_hash)
+
+                if last_tx_id:
+                    sql += "\nAND c.timestamp > (SELECT timestamp FROM cdms WHERE tx_id='{0}')".format(last_tx_id)
+
+                if limit:
+                    sql += '\nORDER BY min_ts DESC'
+                    sql += '\nLIMIT ' + str(limit)
+                else:
+                    sql += 'ORDER BY min_ts ASC'
+                
                 cur.execute(sql)
                 records = cur.fetchall()
 
@@ -138,7 +132,7 @@ def get_cdms(alice, group_hash):
                     cur.execute("""
                         SELECT c.recipient, c.tx_id, c.timestamp
                         FROM cdms c
-                        WHERE c.hash='{hash}'
+                        WHERE c.message_hash='{hash}'
                         ORDER BY timestamp
                     """.format(
                         hash=record[1],
@@ -155,7 +149,7 @@ def get_cdms(alice, group_hash):
 
                     data = {
                         "message": record[0],
-                        "hash": record[1],
+                        "messsageHash": record[1],
                         "txId": record[2],
                         "id": record[3],
                         "attachmentHash": record[4],
@@ -163,13 +157,20 @@ def get_cdms(alice, group_hash):
                         "realSender": record[6],
                         "logicalSender": record[9] or record[6],
                         "recipient": record[7],
-                        "sharedWith": shared_with
+                        "groupHash": record[8],
+                        "subject": record[12],
+                        "subjectHash": record[13],
+                        "type": record[14],
+                        "sharedWith": shared_with,
+                        "ipfsHash": base58.b58decode(record[15]).decode('utf-8'),
+                        "signature": record[16] or record[17][0]
                     }
+
                     sender = record[9] or record[6]
                     if alice == sender:
-                        data['type'] = 'outgoing'
+                        data['direction'] = 'outgoing'
                     else:
-                        data['type'] = 'incoming'
+                        data['direction'] = 'incoming'
                         
                     cdms.append(data)
 

@@ -36,19 +36,19 @@ dsn = {
 class Groups(HTTPMethodView):
     @staticmethod
     def get(request, alice):
-        last_timestamp = request.args['lastTimestamp'][0] if 'lastTimestamp' in request.args else None
+        last_tx_id = request.args['lastTxId'][0] if 'lastTxId' in request.args else None
         data = {
-            'groups': get_groups(alice, last_timestamp)
+            'groups': get_groups(alice, last_tx_id)
         }
         return json(data, status=200)
 
 
-def get_groups(alice, last_timestamp):
+def get_groups(alice, last_tx_id = None):
     conn = psycopg2.connect(**dsn)
     try:
         with conn:
             with conn.cursor() as cur:
-                query = """     
+                sql = """     
                     SELECT DISTINCT
                         c.group_hash,
                         array(
@@ -58,7 +58,8 @@ def get_groups(alice, last_timestamp):
                         ) as cdms,
                         c.timestamp
                     FROM cdms c
-                    WHERE c.recipient = '{alice}'
+                    LEFT JOIN transactions t on c.tx_id = t.id
+                    WHERE (c.recipient = '{alice}' OR t.sender_public_key = '{alice}')
                     AND c.timestamp IN (
                         SELECT max(cc.timestamp)
                         FROM cdms cc
@@ -67,29 +68,14 @@ def get_groups(alice, last_timestamp):
                 """.format(
                     alice=alice
                 )
-                if last_timestamp:
-                    query = query + "AND c.timestamp > (SELECT to_timestamp({last_timestamp}) AT TIME ZONE 'UTC')\n".format(
-                        last_timestamp=last_timestamp
-                    )
 
-                query = query + 'ORDER BY c.timestamp DESC'
-                cur.execute(query)
+                if last_tx_id:
+                    sql += "AND c.timestamp > (SELECT timestamp FROM cdms WHERE tx_id='{0}')".format(last_tx_id)
+                sql += "\nORDER BY c.timestamp ASC"
+
+                cur.execute(sql)
                 records = cur.fetchall()
 
-                nolilPublicKey = 'cEdRrkTRMkd61UdQHvs1c2pwLfuCXVTA4GaABmiEqrP'
-                nolikGroupHash = hashlib.sha256(''.join(sorted([alice, nolilPublicKey])).encode('utf-8')).hexdigest()
-                nolikCdms = get_cdms(alice, nolikGroupHash)
-
-                
-                # if alice != nolilPublicKey:
-                #     groups.append({
-                #         'members': [alice, nolilPublicKey],
-                #         'groupHash': nolikGroupHash,
-                #         'totalCdms': len(nolikCdms),
-                #         'lastCdm': None if len(nolikCdms) == 0 else nolikCdms[-1]
-                #     })
-
-                # group_hashes = [nolikGroupHash]
                 groups = []
                 group_hashes = []
                 for record in records:
@@ -97,11 +83,10 @@ def get_groups(alice, last_timestamp):
                     if (group_hash in group_hashes):
                         continue
                     members = record[1]
-                    cdms = get_cdms(alice, group_hash)
+                    cdms = get_cdms(alice, group_hash, limit=1)
                     group = {
                         'members': members,
                         'groupHash': group_hash,
-                        'totalCdms': len(cdms),
                         'lastCdm': None if len(cdms) == 0 else cdms[-1]
                     }
                     groups.append(group)

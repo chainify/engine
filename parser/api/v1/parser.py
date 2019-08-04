@@ -101,25 +101,58 @@ class Parser:
                         
                         recipients = []
                         for message in messages:
-                            recipient = message.findall('recipient')[0] if len(message.findall('recipient')) > 0 else None
-                            recipient_public_key = recipient.findall('publickey')[0].text if len(recipient.findall('publickey')) > 0 else None
-                            if recipient_public_key not in recipients:
-                                recipients.append(recipient_public_key)
+                            to_public_key = None
+                            to = message.findall('to')[0] if len(message.findall('to')) > 0 else None
+                            if to:
+                                to_public_key = to.findall('publickey')[0].text if len(to.findall('publickey')) > 0 else None
+                            if to_public_key and to_public_key not in recipients:
+                                recipients.append(to_public_key)
+
+                            cc_public_key = None
+                            cc = message.findall('cc')[0] if len(message.findall('cc')) > 0 else None
+                            if cc:
+                                cc_public_key = cc.findall('publickey')[0].text if len(cc.findall('publickey')) > 0 else None
+                            if cc_public_key and cc_public_key not in recipients:
+                                recipients.append(cc_public_key)
 
                         group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
                         for message in messages:
-                            recipient = message.findall('recipient')[0] if len(message.findall('recipient')) > 0 else None
-                            recipient_public_key = recipient.findall('publickey')[0].text if len(recipient.findall('publickey')) > 0 else None
-                            ciphertext = message.findall('ciphertext')[0].text if len(message.findall('ciphertext')) > 0 else None
-                            message_hash = message.findall('sha256')[0].text if len(message.findall('sha256')) > 0 else None
+                            to_public_key = None
+                            cc_public_key = None
+                            to = message.findall('to')[0] if len(message.findall('to')) > 0 else None
+                            cc = message.findall('cc')[0] if len(message.findall('cc')) > 0 else None
+                            if to:
+                                to_public_key = to.findall('publickey')[0].text if len(to.findall('publickey')) > 0 else None
+                            if cc:
+                                cc_public_key = cc.findall('publickey')[0].text if len(cc.findall('publickey')) > 0 else None
 
-                            if recipient_public_key not in recipients:
-                                recipients.append(recipient_public_key)
+                            subject = message.findall('subject')[0] if len(message.findall('subject')) > 0 else None
+                            subject_ciphertext = subject.findall('ciphertext')[0].text if len(subject.findall('ciphertext')) > 0 else None
+                            subject_sha256hash = subject.findall('sha256')[0].text if len(subject.findall('sha256')) > 0 else None
+
+                            body = message.findall('body')[0] if len(message.findall('body')) > 0 else None
+                            body_ciphertext = body.findall('ciphertext')[0].text if len(body.findall('ciphertext')) > 0 else None
+                            body_sha256hash = body.findall('sha256')[0].text if len(body.findall('sha256')) > 0 else None
+
+                            recipient_public_key = to_public_key if to_public_key else cc_public_key
+                            recipient_type = 'to' if to_public_key else 'cc'
 
                             cdm_id = 'cdm-' + str(uuid.uuid4())
-                            self.sql_data_cdms.append((cdm_id, tx['id'], recipient_public_key, ciphertext, message_hash, group_hash, blockchain, network))
+                            self.sql_data_cdms.append((
+                                cdm_id,
+                                tx['id'],
+                                recipient_public_key,
+                                subject_ciphertext,
+                                subject_sha256hash,
+                                body_ciphertext,
+                                body_sha256hash,
+                                group_hash,
+                                blockchain,
+                                network,
+                                recipient_type
+                            ))
                             
-                            senders = message.findall('senders')[0] if len(message.findall('senders')) > 0 else None
+                            senders = message.findall('from')[0] if len(message.findall('from')) > 0 else None
                             if senders:
                                 for sender in senders:
                                     sender_public_key = sender.findall('publickey')[0].text if len(sender.findall('publickey')) > 0 else None
@@ -128,7 +161,6 @@ class Parser:
                                     sender_id = str(uuid.uuid4())                                    
                                     self.sql_data_senders.append((sender_id, cdm_id, sender_public_key, signature, True))
 
-                        print('self.sql_data_cdms', len(self.sql_data_cdms))
                         tx_data = (
                             tx['id'],
                             data['height'],
@@ -180,7 +212,7 @@ class Parser:
                         sql = """INSERT INTO proofs (tx_id, proof) VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_proofs)
 
-                        sql = """INSERT INTO cdms (id, tx_id, recipient, message, hash, group_hash, blockchain, network)
+                        sql = """INSERT INTO cdms (id, tx_id, recipient, subject, subject_hash, message, message_hash, group_hash, blockchain, network, type)
                         VALUES %s ON CONFLICT DO NOTHING"""
                         execute_values(cur, sql, self.sql_data_cdms)        
 
