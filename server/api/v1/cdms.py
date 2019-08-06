@@ -130,15 +130,9 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
                 cdms = []
                 for record in records:
                     cur.execute("""
-                        SELECT c.recipient, c.tx_id, c.timestamp
+                        SELECT DISTINCT c.recipient, c.tx_id, c.timestamp, c.type
                         FROM cdms c
                         WHERE c.message_hash='{hash}'
-                        UNION
-                        SELECT t.sender_public_key, c.tx_id, c.timestamp
-                        FROM cdms c
-                        LEFT JOIN transactions t on c.tx_id = t.id
-                        WHERE c.message_hash='{hash}'
-                        ORDER BY timestamp
                     """.format(
                         hash=record[1]
                     ))
@@ -148,7 +142,8 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
                         shared_with.append({
                             'publicKey': recipient[0],
                             'txId': recipient[1],
-                            'timestamp': recipient[2]
+                            'timestamp': recipient[2],
+                            'type': recipient[3]
                         })
 
                     data = {
