@@ -78,7 +78,7 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
         with conn:
             with conn.cursor() as cur:
                 sql = """
-                    SELECT
+                    SELECT DISTINCT ON (c.group_hash, c.message_hash, min_ts)
                         c.message,
                         c.message_hash,
                         t.id,
@@ -108,8 +108,8 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
                         ) as proofs
                     FROM cdms c
                     LEFT JOIN transactions t on c.tx_id = t.id
-                    LEFT JOIN senders s ON s.cdm_id = c.id
-                    WHERE (c.recipient='{alice}' OR t.sender_public_key='{alice}')
+                    LEFT JOIN senders s on c.id = s.cdm_id
+                    WHERE (c.recipient = '{alice}' or t.sender_public_key = '{alice}')
                     """.format(alice=alice)
 
                 if group_hash not in ['None', None]:
@@ -133,10 +133,14 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
                         SELECT c.recipient, c.tx_id, c.timestamp
                         FROM cdms c
                         WHERE c.message_hash='{hash}'
+                        UNION
+                        SELECT t.sender_public_key, c.tx_id, c.timestamp
+                        FROM cdms c
+                        LEFT JOIN transactions t on c.tx_id = t.id
+                        WHERE c.message_hash='{hash}'
                         ORDER BY timestamp
                     """.format(
-                        hash=record[1],
-                        groupHash=record[7]
+                        hash=record[1]
                     ))
                     recipients = cur.fetchall()
                     shared_with = []
@@ -149,7 +153,7 @@ def get_cdms(alice, group_hash=None, limit=None, last_tx_id=None):
 
                     data = {
                         "message": record[0],
-                        "messsageHash": record[1],
+                        "messageHash": record[1],
                         "txId": record[2],
                         "id": record[3],
                         "attachmentHash": record[4],

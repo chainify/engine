@@ -99,25 +99,25 @@ class Parser:
                         network = root.findall('network')[0].text if len(root.findall('network')) > 0 else None
                         messages = root.findall('messages')[0] if len(root.findall('messages')) > 0 else []
                         
-                        recipients = []
+                        # members = [tx['senderPublicKey']]
+                        # for message in messages:
+                        #     to_public_key = None
+                        #     to = message.findall('to')[0] if len(message.findall('to')) > 0 else None
+                        #     if to:
+                        #         to_public_key = to.findall('publickey')[0].text if len(to.findall('publickey')) > 0 else None
+                        #     if to_public_key and to_public_key not in members:
+                        #         members.append(to_public_key)
+
+                        #     cc_public_key = None
+                        #     cc = message.findall('cc')[0] if len(message.findall('cc')) > 0 else None
+                        #     if cc:
+                        #         cc_public_key = cc.findall('publickey')[0].text if len(cc.findall('publickey')) > 0 else None
+                        #     if cc_public_key and cc_public_key not in members:
+                        #         members.append(cc_public_key)
+
+                        # group_hash = hashlib.sha256(''.join(sorted(members)).encode('utf-8')).hexdigest()
                         for message in messages:
                             to_public_key = None
-                            to = message.findall('to')[0] if len(message.findall('to')) > 0 else None
-                            if to:
-                                to_public_key = to.findall('publickey')[0].text if len(to.findall('publickey')) > 0 else None
-                            if to_public_key and to_public_key not in recipients:
-                                recipients.append(to_public_key)
-
-                            cc_public_key = None
-                            cc = message.findall('cc')[0] if len(message.findall('cc')) > 0 else None
-                            if cc:
-                                cc_public_key = cc.findall('publickey')[0].text if len(cc.findall('publickey')) > 0 else None
-                            if cc_public_key and cc_public_key not in recipients:
-                                recipients.append(cc_public_key)
-
-                        group_hash = hashlib.sha256(''.join(sorted(recipients)).encode('utf-8')).hexdigest()
-                        for message in messages:
-                            to_public_key = None
                             cc_public_key = None
                             to = message.findall('to')[0] if len(message.findall('to')) > 0 else None
                             cc = message.findall('cc')[0] if len(message.findall('cc')) > 0 else None
@@ -126,16 +126,27 @@ class Parser:
                             if cc:
                                 cc_public_key = cc.findall('publickey')[0].text if len(cc.findall('publickey')) > 0 else None
 
+                            subject_ciphertext = None
+                            subject_sha256hash = None
                             subject = message.findall('subject')[0] if len(message.findall('subject')) > 0 else None
-                            subject_ciphertext = subject.findall('ciphertext')[0].text if len(subject.findall('ciphertext')) > 0 else None
-                            subject_sha256hash = subject.findall('sha256')[0].text if len(subject.findall('sha256')) > 0 else None
+                            if subject:
+                                subject_ciphertext = subject.findall('ciphertext')[0].text if len(subject.findall('ciphertext')) > 0 else None
+                                subject_sha256hash = subject.findall('sha256')[0].text if len(subject.findall('sha256')) > 0 else None
 
+                            body_ciphertext = None
+                            body_sha256hash = None
                             body = message.findall('body')[0] if len(message.findall('body')) > 0 else None
-                            body_ciphertext = body.findall('ciphertext')[0].text if len(body.findall('ciphertext')) > 0 else None
-                            body_sha256hash = body.findall('sha256')[0].text if len(body.findall('sha256')) > 0 else None
+                            if body:
+                                body_ciphertext = body.findall('ciphertext')[0].text if len(body.findall('ciphertext')) > 0 else None
+                                body_sha256hash = body.findall('sha256')[0].text if len(body.findall('sha256')) > 0 else None
 
                             recipient_public_key = to_public_key if to_public_key else cc_public_key
                             recipient_type = 'to' if to_public_key else 'cc'
+
+                            group_hash = hashlib.sha256(''.join([subject_sha256hash or '', body_sha256hash or '']).encode('utf-8')).hexdigest()
+                            extra = message.findall('extra')[0] if len(message.findall('extra')) > 0 else None
+                            if extra:
+                                group_hash = extra.findall('groupHash')[0].text if len(extra.findall('groupHash')) > 0 else None
 
                             cdm_id = 'cdm-' + str(uuid.uuid4())
                             self.sql_data_cdms.append((

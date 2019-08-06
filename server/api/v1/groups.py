@@ -48,22 +48,24 @@ def get_groups(alice, last_tx_id = None):
     try:
         with conn:
             with conn.cursor() as cur:
-                sql = """     
+                sql = """
                     SELECT DISTINCT
                         c.group_hash,
                         array(
-                            SELECT DISTINCT cc.recipient
-                            FROM cdms cc
-                            WHERE cc.group_hash = c.group_hash
-                        ) as cdms,
+                            SELECT recipient FROM cdms cc
+                            WHERE c.group_hash = cc.group_hash
+                            UNION
+                            SELECT tt.sender_public_key FROM transactions tt
+                            WHERE c.tx_id = tt.id
+                        ),
                         c.timestamp
                     FROM cdms c
                     LEFT JOIN transactions t on c.tx_id = t.id
                     WHERE (c.recipient = '{alice}' OR t.sender_public_key = '{alice}')
                     AND c.timestamp IN (
-                        SELECT max(cc.timestamp)
-                        FROM cdms cc
-                        WHERE cc.group_hash = c.group_hash
+                        SELECT max(timestamp)
+                        FROM cdms
+                        WHERE group_hash = c.group_hash
                     )
                 """.format(
                     alice=alice
@@ -83,10 +85,11 @@ def get_groups(alice, last_tx_id = None):
                     if (group_hash in group_hashes):
                         continue
                     members = record[1]
-                    cdms = get_cdms(alice, group_hash, limit=1)
+                    cdms = get_cdms(alice, group_hash, limit=None)
                     group = {
-                        'members': members,
+                        'members': [member for member in members if member != alice],
                         'groupHash': group_hash,
+                        'initCdm': None if len(cdms) == 0 else cdms[0],
                         'lastCdm': None if len(cdms) == 0 else cdms[-1]
                     }
                     groups.append(group)
